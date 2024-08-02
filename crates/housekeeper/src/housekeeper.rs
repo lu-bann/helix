@@ -11,8 +11,7 @@ use helix_beacon_client::{
     MultiBeaconClientTrait,
 };
 use helix_common::{
-    api::builder_api::BuilderGetValidatorsResponseEntry, pending_block::PendingBlock, ProposerDuty, RelayConfig, Route,
-    SignedValidatorRegistrationEntry,
+    api::builder_api::BuilderGetValidatorsResponseEntry, pending_block::PendingBlock, ProposerDuty, RelayConfig, SignedValidatorRegistrationEntry,
 };
 use helix_database::{error::DatabaseError, DatabaseService};
 use helix_datastore::Auctioneer;
@@ -71,6 +70,7 @@ pub struct Housekeeper<DB: DatabaseService + 'static, BeaconClient: MultiBeaconC
 
     leader_id: String,
 
+    #[allow(unused)]
     config: RelayConfig,
 }
 
@@ -126,11 +126,6 @@ impl<DB: DatabaseService, BeaconClient: MultiBeaconClientTrait, A: Auctioneer> H
     async fn process_new_slot(self: &SharedHousekeeper<DB, BeaconClient, A>, head_slot: u64) {
         let (is_new_block, prev_head_slot) = self.update_head_slot(head_slot).await;
         if !is_new_block {
-            return;
-        }
-
-        // Skip processing if the GetPayload route is enabled.
-        if self.config.router_config.enabled_routes.iter().any(|r| r.route == Route::GetPayload) {
             return;
         }
 
