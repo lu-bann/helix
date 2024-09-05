@@ -48,6 +48,7 @@ struct PreferenceParams<'a> {
     filtering: i16,
     trusted_builders: Option<Vec<String>>,
     header_delay: bool,
+    gossip_blobs: bool,
 }
 
 struct TrustedProposerParams<'a> {
@@ -225,6 +226,7 @@ impl PostgresDatabaseService {
                     filtering: entry.registration_info.preferences.filtering as i16,
                     trusted_builders: entry.registration_info.preferences.trusted_builders.clone(),
                     header_delay: entry.registration_info.preferences.header_delay,
+                    gossip_blobs: entry.registration_info.preferences.gossip_blobs,
                 });
 
                 if name.is_some() {
@@ -267,12 +269,21 @@ impl PostgresDatabaseService {
 
             let params: Vec<&(dyn ToSql + Sync)> = structured_params_for_pref
                 .iter()
-                .flat_map(|tuple| vec![&tuple.public_key as &(dyn ToSql + Sync), &tuple.filtering, &tuple.trusted_builders, &tuple.header_delay])
+                .flat_map(|tuple| {
+                    vec![
+                        &tuple.public_key as &(dyn ToSql + Sync),
+                        &tuple.filtering,
+                        &tuple.trusted_builders,
+                        &tuple.header_delay,
+                        &tuple.gossip_blobs,
+                    ]
+                })
                 .collect();
 
             // Construct the SQL statement with multiple VALUES clauses
-            let mut sql = String::from("INSERT INTO validator_preferences (public_key, filtering, trusted_builders, header_delay) VALUES ");
-            let num_params_per_row = 4;
+            let mut sql =
+                String::from("INSERT INTO validator_preferences (public_key, filtering, trusted_builders, header_delay, gossip_blobs) VALUES ");
+            let num_params_per_row = 5;
             let values_clauses: Vec<String> = (0..params.len() / num_params_per_row)
                 .map(|row| {
                     let placeholders: Vec<String> = (1..=num_params_per_row).map(|n| format!("${}", row * num_params_per_row + n)).collect();
@@ -282,7 +293,7 @@ impl PostgresDatabaseService {
 
             // Join the values clauses and append them to the SQL statement
             sql.push_str(&values_clauses.join(", "));
-            sql.push_str(" ON CONFLICT (public_key) DO UPDATE SET filtering = excluded.filtering, trusted_builders = excluded.trusted_builders, header_delay = excluded.header_delay");
+            sql.push_str(" ON CONFLICT (public_key) DO UPDATE SET filtering = excluded.filtering, trusted_builders = excluded.trusted_builders, header_delay = excluded.header_delay, gossip_blobs = excluded.gossip_blobs");
 
             // Execute the query
             transaction.execute(&sql, &params[..]).await?;
@@ -368,17 +379,18 @@ impl DatabaseService for PostgresDatabaseService {
 
         transaction
             .execute(
-                "INSERT INTO validator_preferences (public_key, filtering, trusted_builders, header_delay)
-            VALUES ($1, $2, $3, $4)
+                "INSERT INTO validator_preferences (public_key, filtering, trusted_builders, header_delay, gossip_blobs)
+            VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (public_key)
             DO UPDATE SET
-                filtering = excluded.filtering, trusted_builders = excluded.trusted_builders, header_delay = excluded.header_delay
+                filtering = excluded.filtering, trusted_builders = excluded.trusted_builders, header_delay = excluded.header_delay, gossip_blobs = excluded.gossip_blobs
             ",
                 &[
                     &public_key.as_ref(),
                     &(registration_info.preferences.filtering as i16),
                     &registration_info.preferences.trusted_builders,
                     &registration_info.preferences.header_delay,
+                    &registration_info.preferences.gossip_blobs,
                 ],
             )
             .await?;
@@ -470,6 +482,7 @@ impl DatabaseService for PostgresDatabaseService {
                     validator_preferences.filtering,
                     validator_preferences.trusted_builders,
                     validator_preferences.header_delay,
+                    validator_preferences.gossip_blobs,
                     validator_registrations.inserted_at
                 FROM validator_registrations
                 INNER JOIN validator_preferences ON validator_registrations.public_key = validator_preferences.public_key

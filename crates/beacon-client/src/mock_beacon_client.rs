@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use ethereum_consensus::{primitives::Root, ssz::prelude::*};
-use helix_common::{ProposerDuty, ValidatorSummary};
+use helix_common::{beacon_api::PublishBlobsRequest, ProposerDuty, ValidatorSummary};
 use tokio::sync::broadcast::Sender;
 
 use crate::{
@@ -86,6 +86,10 @@ impl BeaconClientTrait for MockBeaconClient {
         _broadcast_validation: Option<BroadcastValidation>,
         _fork: ethereum_consensus::Fork,
     ) -> Result<u16, BeaconClientError> {
+        Ok(self.publish_block_response_code)
+    }
+
+    async fn publish_blobs(&self, _blob_sidecars: PublishBlobsRequest) -> Result<u16, BeaconClientError> {
         Ok(self.publish_block_response_code)
     }
 }

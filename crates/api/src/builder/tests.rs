@@ -1,15 +1,16 @@
+#![allow(unused)]
 #[cfg(test)]
 mod tests {
 
     // +++ IMPORTS +++
     use core::panic;
-    use std::{convert::Infallible, future::pending, io::Write, net::IpAddr, ops::Deref, pin::Pin, str::FromStr, sync::Arc, time::Duration};
+    use std::{convert::Infallible, future::pending, io::Write, ops::Deref, pin::Pin, str::FromStr, sync::Arc, time::Duration};
 
     use axum::http::{header, Method, Request, Uri};
     use ethereum_consensus::{
         builder::{SignedValidatorRegistration, ValidatorRegistration},
         configs::mainnet::CAPELLA_FORK_EPOCH,
-        deneb::{Transaction, Withdrawal},
+        deneb::Withdrawal,
         phase0::mainnet::SLOTS_PER_EPOCH,
         primitives::{BlsPublicKey, BlsSignature},
         ssz::{self, prelude::*},
@@ -1275,7 +1276,7 @@ mod tests {
         // calculate_withdrawals_root use MPT to calculate the root
         assert_eq!(hex::encode(withdrawals_root), "25068b16d9a849006edff1fbe9bf96799ef524f0ba87199559d1f714719a8202");
 
-        let mut wlist: List<Withdrawal, 16> = withdrawals.try_into().unwrap();
+        let wlist: List<Withdrawal, 16> = withdrawals.try_into().unwrap();
         let root = wlist.hash_tree_root().unwrap();
 
         // hash_tree_root use SSZ to calculate the root

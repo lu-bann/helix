@@ -1,5 +1,6 @@
 #![allow(ambiguous_glob_reexports)]
 pub mod api;
+pub mod beacon_api;
 pub mod bid_submission;
 pub mod builder_info;
 pub mod chain_info;
