@@ -125,6 +125,7 @@ impl<DB: DatabaseService, BeaconClient: MultiBeaconClientTrait, A: Auctioneer> H
     /// Skips slots that are older than the currently processed slot.
     async fn process_new_slot(self: &SharedHousekeeper<DB, BeaconClient, A>, head_slot: u64) {
         let (is_new_block, prev_head_slot) = self.update_head_slot(head_slot).await;
+        info!(is_new_block = is_new_block, prev_head_slot = prev_head_slot, head_slot = head_slot, "process_new_slot");
         if !is_new_block {
             return;
         }
@@ -411,6 +412,13 @@ impl<DB: DatabaseService, BeaconClient: MultiBeaconClientTrait, A: Auctioneer> H
     async fn should_update_duties(self: &SharedHousekeeper<DB, BeaconClient, A>, head_slot: u64) -> bool {
         let proposer_duties_slot = *self.proposer_duties_slot.lock().await;
         let last_proposer_duty_distance = head_slot.saturating_sub(proposer_duties_slot);
+        info!(
+            head_slot = head_slot,
+            proposer_duties_slot = proposer_duties_slot,
+            last_proposer_duty_distance = last_proposer_duty_distance,
+            result = head_slot % PROPOSER_DUTIES_UPDATE_FREQ == 0 || last_proposer_duty_distance >= PROPOSER_DUTIES_UPDATE_FREQ,
+            "should_update_duties"
+        );
         head_slot % PROPOSER_DUTIES_UPDATE_FREQ == 0 || last_proposer_duty_distance >= PROPOSER_DUTIES_UPDATE_FREQ
     }
 

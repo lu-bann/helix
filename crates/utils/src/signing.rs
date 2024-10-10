@@ -8,6 +8,7 @@ use ethereum_consensus::{
     state_transition::Context,
     Error, Fork,
 };
+use tracing::info;
 
 pub fn verify_signed_consensus_message<T: HashTreeRoot>(
     message: &mut T,
@@ -35,6 +36,8 @@ pub fn verify_signed_builder_message<T: HashTreeRoot>(
     context: &Context,
 ) -> Result<(), Error> {
     let domain = compute_builder_domain(context)?;
+    let signing_root = compute_signing_root(message, domain)?;
+    info!(signing_root = signing_root.to_string(), public_key = public_key.to_string(), "signing root",);
     verify_signed_data(message, signature, public_key, domain)?;
     Ok(())
 }

@@ -10,6 +10,7 @@ license.workspace = true
 # Serialization and Data Format 
 serde.workspace = true
 serde_json.workspace = true
+tracing.workspace = true
 
 # Ethereum Types
 ethereum-consensus.workspace = true

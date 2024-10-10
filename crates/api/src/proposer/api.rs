@@ -1265,6 +1265,7 @@ where
             slot = slot_update.slot,
             slot_start_next_epoch = (epoch + 1) * SLOTS_PER_EPOCH,
             next_proposer_duty = ?slot_update.next_duty,
+            next_duties = ?slot_update.new_duties,
             "Updated head slot",
         );
 
