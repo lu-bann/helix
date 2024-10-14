@@ -75,6 +75,6 @@ pub fn get_pubkey_from_hex(pubkey: &str) -> Result<BlsPublicKey, ethereum_consen
 pub fn get_hash_from_hex(hash: &str) -> Result<Hash32, AuctioneerError> {
     // strip 0x prefix if present
     let hex_str = hash.trim_start_matches("0x");
-    let bytes = hex::decode(hex_str).map_err(|e| ethereum_consensus::crypto::bls::Error::Hex(e))?;
+    let bytes = hex::decode(hex_str).map_err(ethereum_consensus::crypto::bls::Error::Hex)?;
     Ok(Hash32::try_from(bytes.as_slice())?)
 }

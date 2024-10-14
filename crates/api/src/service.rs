@@ -76,7 +76,7 @@ impl ApiService {
             NetworkConfig::Sepolia => ChainInfo::for_sepolia(),
             NetworkConfig::Holesky => ChainInfo::for_holesky(),
             NetworkConfig::Custom { ref dir_path, ref genesis_validator_root, genesis_time } => {
-                match ChainInfo::for_custom(dir_path.clone(), genesis_validator_root.clone(), genesis_time) {
+                match ChainInfo::for_custom(dir_path.clone(), *genesis_validator_root, genesis_time) {
                     Ok(chain_info) => chain_info,
                     Err(err) => {
                         error!("Failed to load custom chain info: {:?}", err);

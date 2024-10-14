@@ -128,7 +128,6 @@ impl ChainInfo {
         let context = Context::try_from_file(&config)?;
         let network = Network::Custom(config.clone());
         let clock = from_system_time(genesis_time_in_secs, context.seconds_per_slot, context.slots_per_epoch);
-        let genesis_time_in_secs = genesis_time_in_secs;
         let seconds_per_slot = context.seconds_per_slot;
 
         Ok(Self { network, genesis_validators_root, context, clock, genesis_time_in_secs, seconds_per_slot })

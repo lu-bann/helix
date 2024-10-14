@@ -112,7 +112,7 @@ impl BidSubmission for SignedHeaderSubmission {
     fn bid_trace(&self) -> &BidTrace {
         match self {
             Self::Capella(signed_header_submission) => &signed_header_submission.message.bid_trace,
-            Self::Deneb(signed_header_submission) => &signed_header_submission.message.bid_trace(),
+            Self::Deneb(signed_header_submission) => signed_header_submission.message.bid_trace(),
         }
     }
 
@@ -267,7 +267,7 @@ impl SignedHeaderSubmission {
     pub fn bid_trace(&self) -> &BidTrace {
         match self {
             Self::Capella(signed_header_submission) => &signed_header_submission.message.bid_trace,
-            Self::Deneb(signed_header_submission) => &signed_header_submission.message.bid_trace(),
+            Self::Deneb(signed_header_submission) => signed_header_submission.message.bid_trace(),
         }
     }
 }
