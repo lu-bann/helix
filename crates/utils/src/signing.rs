@@ -1,13 +1,16 @@
 use ethereum_consensus::{
     crypto::SecretKey,
+    deneb::compute_fork_data_root,
     domains::DomainType,
     phase0::mainnet::compute_domain,
-    primitives::{BlsPublicKey, BlsSignature, Domain, Root, Slot},
+    primitives::{BlsPublicKey, BlsSignature, Domain, Root, Slot, Version},
     signing::{compute_signing_root, sign_with_domain, verify_signed_data},
     ssz::prelude::*,
     state_transition::Context,
     Error, Fork,
 };
+
+pub const COMMIT_BOOST_DOMAIN: [u8; 4] = [109, 109, 111, 67];
 
 pub fn verify_signed_consensus_message<T: HashTreeRoot>(
     message: &mut T,
@@ -39,6 +42,20 @@ pub fn verify_signed_builder_message<T: HashTreeRoot>(
     Ok(())
 }
 
+pub fn verify_signed_commit_boost_message<T: HashTreeRoot>(
+    message: &mut T,
+    signature: &BlsSignature,
+    public_key: &BlsPublicKey,
+    slot_hint: Option<Slot>,
+    root_hint: Option<Root>,
+    context: &Context,
+) -> Result<(), Error> {
+    let fork_version = slot_hint.map(|slot| context.fork_version_for(context.fork_for(slot)));
+    let domain = compute_commit_boost_domain(fork_version, root_hint, context)?;
+    verify_signed_data(message, signature, public_key, domain)?;
+    Ok(())
+}
+
 pub fn compute_consensus_signing_root<T: HashTreeRoot>(
     data: &mut T,
     slot: Slot,
@@ -64,4 +81,25 @@ pub fn compute_builder_signing_root<T: HashTreeRoot>(data: &mut T, context: &Con
 pub fn compute_builder_domain(context: &Context) -> Result<Domain, Error> {
     let domain_type = DomainType::ApplicationBuilder;
     compute_domain(domain_type, None, None, context)
+}
+
+pub fn compute_commit_boost_domain(fork_version: Option<Version>, root_hint: Option<Root>, context: &Context) -> Result<Domain, Error> {
+    let domain_type = COMMIT_BOOST_DOMAIN;
+    compute_custom_domain(&domain_type, fork_version, root_hint, context)
+}
+
+pub fn compute_custom_domain(
+    domain_mask: &[u8; 4],
+    fork_version: Option<Version>,
+    genesis_validators_root: Option<Root>,
+    context: &Context,
+) -> Result<Domain, Error> {
+    let fork_version = fork_version.unwrap_or(context.genesis_fork_version);
+    let genesis_validators_root = genesis_validators_root.unwrap_or_default();
+    let fork_data_root = compute_fork_data_root(fork_version, genesis_validators_root)?;
+
+    let mut domain = Domain::default();
+    domain[..4].copy_from_slice(domain_mask);
+    domain[4..].copy_from_slice(&fork_data_root[..28]);
+    Ok(domain)
 }

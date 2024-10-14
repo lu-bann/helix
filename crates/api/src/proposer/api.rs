@@ -36,7 +36,7 @@ use helix_common::{
 use helix_database::DatabaseService;
 use helix_datastore::{constraints::ConstraintsAuctioneer, error::AuctioneerError, Auctioneer};
 use helix_housekeeper::{ChainUpdate, SlotUpdate};
-use helix_utils::signing::{verify_signed_builder_message, verify_signed_consensus_message};
+use helix_utils::signing::{verify_signed_builder_message, verify_signed_commit_boost_message, verify_signed_consensus_message};
 use tokio::{
     sync::{
         mpsc::{self, error::SendError, Receiver, Sender},
@@ -885,10 +885,15 @@ where
         // Drop the read lock guard to avoid holding it during signature verification
         drop(duties_read_guard);
 
-        // Verify proposer signature
-        if let Err(err) =
-            verify_signed_builder_message(&mut election_req.message, &election_req.signature, &proposer_pub_key, &self.chain_info.context)
-        {
+        // Verify commit boost signature
+        if let Err(err) = verify_signed_commit_boost_message(
+            &mut election_req.message,
+            &election_req.signature,
+            &proposer_pub_key,
+            Some(head_slot),
+            Some(self.chain_info.genesis_validators_root),
+            &self.chain_info.context,
+        ) {
             return Err(ProposerApiError::InvalidSignature(err));
         }
 
