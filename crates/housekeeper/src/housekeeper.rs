@@ -355,8 +355,9 @@ impl<DB: DatabaseService, BeaconClient: MultiBeaconClientTrait, A: Auctioneer> H
         };
 
         if signed_validator_registrations.is_empty() {
-            warn!("No signed validator registrations found for proposer duties");
+            warn!("No signed validator registrations found for proposer duties, slot: {}", head_slot);
         } else {
+            info!("Storing proposer duties for slot {}, validators: {:?}", head_slot, signed_validator_registrations.keys());
             match self.format_and_store_duties(proposer_duties, signed_validator_registrations).await {
                 Ok(num_duties) => {
                     info!(epoch_from = epoch, num_duties = num_duties, "updated proposer duties")
