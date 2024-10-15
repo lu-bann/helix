@@ -64,7 +64,7 @@ bytes = "1.7.2"
 chrono = "0.4.38"
 
 # Ethereum Types
-ethereum-consensus = { git = "https://github.com/akfork/ethereum-consensus", rev = "c071be240611b023cacf864160406fcc889b8898" }
+ethereum-consensus = { git = "https://github.com/akfork/ethereum-consensus", rev = "f7b6e535262eb1bcb022a4e57712bf8b17c8d362" }
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.0.7" }
 
 # Logging
