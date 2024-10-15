@@ -145,6 +145,7 @@ impl FromRow for BuilderGetValidatorsResponseEntry {
                         .get::<&str, Option<Vec<&str>>>("trusted_builders")
                         .map(|trusted_builders| trusted_builders.into_iter().map(|builder| builder.to_string()).collect()),
                     header_delay: row.get::<&str, bool>("header_delay"),
+                    gossip_blobs: row.get::<&str, bool>("gossip_blobs"),
                 },
             },
         })
@@ -205,6 +206,7 @@ impl FromRow for SignedValidatorRegistrationEntry {
                         .get::<&str, Option<Vec<&str>>>("trusted_builders")
                         .map(|trusted_builders| trusted_builders.into_iter().map(|builder| builder.to_string()).collect()),
                     header_delay: row.get::<&str, bool>("header_delay"),
+                    gossip_blobs: row.get::<&str, bool>("gossip_blobs"),
                 },
             },
             inserted_at: parse_timestamptz_to_u64(row.get::<&str, std::time::SystemTime>("inserted_at"))?,

@@ -60,7 +60,7 @@ impl ApiService {
 
         let mut beacon_clients = vec![];
         for cfg in &config.beacon_clients {
-            beacon_clients.push(Arc::new(BeaconClient::from_endpoint_str(&cfg.url)));
+            beacon_clients.push(Arc::new(BeaconClient::from_config(cfg.clone())));
         }
         let multi_beacon_client = Arc::new(MultiBeaconClient::<BeaconClient>::new(beacon_clients));
 
@@ -193,7 +193,7 @@ async fn init_broadcasters(config: &RelayConfig) -> Vec<Arc<BlockBroadcaster>> {
                 }
             }
             BroadcasterConfig::BeaconClient(cfg) => {
-                broadcasters.push(Arc::new(BlockBroadcaster::BeaconClient(BeaconClient::from_endpoint_str(&cfg.url))));
+                broadcasters.push(Arc::new(BlockBroadcaster::BeaconClient(BeaconClient::from_config(cfg.clone()))));
             }
         }
     }
@@ -208,6 +208,7 @@ mod test {
 
     use helix_common::{BeaconClientConfig, FiberConfig};
     use helix_utils::request_encoding::Encoding;
+    use url::Url;
 
     use super::*;
 
@@ -224,7 +225,7 @@ mod test {
         let mut config = RelayConfig::default();
         config.broadcasters = vec![
             BroadcasterConfig::Fiber(FiberConfig { url: "http://localhost:4040".to_string(), api_key: "123".to_string(), encoding: Encoding::Json }),
-            BroadcasterConfig::BeaconClient(BeaconClientConfig { url: "http://localhost:4040".to_string() }),
+            BroadcasterConfig::BeaconClient(BeaconClientConfig { url: Url::parse("http://localhost:4040").unwrap(), gossip_blobs_enabled: false }),
         ];
         let broadcasters = init_broadcasters(&config).await;
         assert_eq!(broadcasters.len(), 1);

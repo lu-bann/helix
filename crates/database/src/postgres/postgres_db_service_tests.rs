@@ -102,6 +102,7 @@ mod tests {
                 filtering: Filtering::Global,
                 trusted_builders: Some(vec!["test".to_string(), "test2".to_string()]),
                 header_delay: true,
+                gossip_blobs: false,
             },
         }
     }
