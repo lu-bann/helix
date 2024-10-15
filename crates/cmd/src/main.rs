@@ -1,6 +1,7 @@
 use helix_api::service::ApiService;
 use helix_common::{LoggingConfig, RelayConfig};
 use tokio::runtime::Builder;
+use tracing::level_filters::LevelFilter;
 
 async fn run() {
     let config = match RelayConfig::load() {
@@ -13,16 +14,15 @@ async fn run() {
 
     let _guard;
 
+    let filter_layer = tracing_subscriber::EnvFilter::from_default_env().add_directive(LevelFilter::INFO.into());
+
     match &config.logging {
         LoggingConfig::Console => {
-            let filter_layer = tracing_subscriber::EnvFilter::from_default_env();
             tracing_subscriber::fmt().with_env_filter(filter_layer).init();
         }
         LoggingConfig::File { dir_path, file_name } => {
             let file_appender = tracing_appender::rolling::daily(dir_path, file_name);
             let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
-
-            let filter_layer = tracing_subscriber::EnvFilter::from_default_env();
 
             tracing_subscriber::fmt().with_env_filter(filter_layer).with_writer(non_blocking).init();
             _guard = Some(guard);
