@@ -82,7 +82,7 @@ impl RateLimitStateForRoute {
         }
 
         // Get or insert the IP address entry in the hashmap
-        let entry = ip_counts.entry(ip).or_insert_with(|| RateLimitEntry::default());
+        let entry = ip_counts.entry(ip).or_default();
 
         // Update the access time and request count for the IP address
         let elapsed = entry.last_access.elapsed();

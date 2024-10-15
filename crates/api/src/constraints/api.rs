@@ -113,7 +113,7 @@ where
             Ok(Some(elected_gateway)) => {
                 trace.gateway_fetched = get_nanos_timestamp()?;
                 debug!(%request_id, ?elected_gateway, ?trace, "found elected gateway");
-                return Ok(axum::Json(elected_gateway));
+                Ok(axum::Json(elected_gateway))
             }
             Ok(None) => {
                 warn!(%request_id, "no gateway found for request");
@@ -144,11 +144,8 @@ where
         let slots_for_epoch = get_remaining_slots_for_current_and_next_n_epochs(head_slot + 1, 1);
         let mut preconfers = vec![];
         for slot in slots_for_epoch {
-            match api.auctioneer.get_elected_gateway(slot).await {
-                Ok(Some(elected_gateway)) => {
-                    preconfers.push(elected_gateway);
-                }
-                _ => {}
+            if let Ok(Some(elected_gateway)) = api.auctioneer.get_elected_gateway(slot).await {
+                preconfers.push(elected_gateway);
             }
         }
 
@@ -227,7 +224,7 @@ fn get_remaining_slots_for_epoch(slot: u64) -> Vec<u64> {
 
     // get a list of slots for the epoch beginning at slot until the end of the epoch
     let all_slots: Vec<u64> = (epoch * SLOTS_PER_EPOCH..(epoch + 1) * SLOTS_PER_EPOCH).collect();
-    let remaining_slots = all_slots.iter().filter(|&s| *s >= slot).map(|&s| s).collect();
+    let remaining_slots = all_slots.iter().filter(|&s| *s >= slot).copied().collect();
     remaining_slots
 }
 

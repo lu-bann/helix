@@ -2,9 +2,9 @@ name: Linting
 
 on:
   push:
-    branches: [ main, develop, "release/**" ]
+    branches: [ main, develop, "release/**", "taiyi" ]
   pull_request:
-    branches: [ main, develop, "release/**" ]
+    branches: [ main, develop, "release/**", "taiyi" ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -28,16 +28,12 @@ jobs:
     - name: Change to project directory
       run: cd ./repos/${{ secrets.REPO_NAME }}
 
-    # Install nightly toolchain and rustfmt
-    - name: Install nightly toolchain and components
-      uses: actions-rs/toolchain@v1
+    # Install rust toolchain and rustfmt
+    - name: Install rust toolchain and components
+      uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: nightly-2024-02-05
+        toolchain: nightly
         components: clippy, rustfmt
-        override: true
-
-    # Rust Linting with Clippy
-    - uses: dtolnay/rust-toolchain@clippy
     - uses: Swatinem/rust-cache@v2
       with:
         cache-on-failure: true

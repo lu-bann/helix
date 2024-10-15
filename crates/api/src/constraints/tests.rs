@@ -13,7 +13,7 @@ pub fn gen_signed_vr() -> SignedValidatorRegistration {
     let sk = SecretKey::random(&mut rng).unwrap();
     let pk = sk.public_key();
 
-    let mut vr = ValidatorRegistration {
+    let vr = ValidatorRegistration {
         fee_recipient: Default::default(),
         gas_limit: 0,
         timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
@@ -22,7 +22,7 @@ pub fn gen_signed_vr() -> SignedValidatorRegistration {
 
     let fk = ChainInfo::for_mainnet();
     let domain = compute_builder_domain(&fk.context).unwrap();
-    let csr = compute_signing_root(&mut vr, domain).unwrap();
+    let csr = compute_signing_root(&vr, domain).unwrap();
 
     let sig = sk.sign(csr.as_ref());
 

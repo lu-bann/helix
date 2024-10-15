@@ -23,7 +23,7 @@ impl SignedPreconferElection {
     }
 
     pub fn preconfer_public_key(&self) -> &BlsPublicKey {
-        &self.message.preconfer_public_key()
+        self.message.preconfer_public_key()
     }
 
     pub fn chain_id(&self) -> u64 {

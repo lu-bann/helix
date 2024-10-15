@@ -216,13 +216,11 @@ where
 
             if let Some(filtering) = preferences.filtering {
                 validator_preferences.filtering = filtering;
-            } else {
-                if let Some(censoring) = preferences.censoring {
-                    validator_preferences.filtering = match censoring {
-                        true => Filtering::Regional,
-                        false => Filtering::Global,
-                    };
-                }
+            } else if let Some(censoring) = preferences.censoring {
+                validator_preferences.filtering = match censoring {
+                    true => Filtering::Regional,
+                    false => Filtering::Global,
+                };
             }
 
             if let Some(trusted_builders) = preferences.trusted_builders {
@@ -467,10 +465,7 @@ where
         // Broadcast get payload request
         if let Err(e) = proposer_api
             .gossiper
-            .broadcast_get_payload(BroadcastGetPayloadParams {
-                signed_blinded_beacon_block: signed_blinded_block.clone(),
-                request_id: request_id.clone(),
-            })
+            .broadcast_get_payload(BroadcastGetPayloadParams { signed_blinded_beacon_block: signed_blinded_block.clone(), request_id })
             .await
         {
             error!(request_id = %request_id, error = %e, "failed to broadcast get payload");
@@ -638,7 +633,7 @@ where
         if is_trusted_proposer {
             let self_clone = self.clone();
             let unblinded_payload_clone = unblinded_payload.clone();
-            let request_id_clone = request_id.clone();
+            let request_id_clone = *request_id;
             let mut trace_clone = trace.clone();
             let payload_clone = payload.clone();
 
@@ -1092,23 +1087,20 @@ where
     /// Will process new gossiped messages from
     async fn process_gossiped_info(&self, mut recveiver: Receiver<GossipedMessage>) {
         while let Some(msg) = recveiver.recv().await {
-            match msg {
-                GossipedMessage::GetPayload(payload) => {
-                    let api_clone = self.clone();
-                    tokio::spawn(async move {
-                        let mut trace = GetPayloadTrace { receive: get_nanos_timestamp().unwrap_or_default(), ..Default::default() };
-                        info!(request_id = %payload.request_id, "processing gossiped payload");
-                        match api_clone._get_payload(payload.signed_blinded_beacon_block, &mut trace, &payload.request_id).await {
-                            Ok(_get_payload_response) => {
-                                info!(request_id = %payload.request_id, "gossiped payload processed");
-                            }
-                            Err(err) => {
-                                error!(request_id = %payload.request_id, error = %err, "error processing gossiped payload");
-                            }
+            if let GossipedMessage::GetPayload(payload) = msg {
+                let api_clone = self.clone();
+                tokio::spawn(async move {
+                    let mut trace = GetPayloadTrace { receive: get_nanos_timestamp().unwrap_or_default(), ..Default::default() };
+                    info!(request_id = %payload.request_id, "processing gossiped payload");
+                    match api_clone._get_payload(payload.signed_blinded_beacon_block, &mut trace, &payload.request_id).await {
+                        Ok(_get_payload_response) => {
+                            info!(request_id = %payload.request_id, "gossiped payload processed");
                         }
-                    });
-                }
-                _ => {}
+                        Err(err) => {
+                            error!(request_id = %payload.request_id, error = %err, "error processing gossiped payload");
+                        }
+                    }
+                });
             }
         }
     }

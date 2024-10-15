@@ -81,7 +81,7 @@ impl PostgresDatabaseService {
     pub fn from_relay_config(relay_config: &RelayConfig) -> Result<Self, Box<dyn std::error::Error>> {
         let mut cfg = Config::new();
         cfg.host = Some(relay_config.postgres.hostname.clone());
-        cfg.port = Some(relay_config.postgres.port.clone());
+        cfg.port = Some(relay_config.postgres.port);
         cfg.dbname = Some(relay_config.postgres.db_name.clone());
         cfg.user = Some(relay_config.postgres.user.clone());
         cfg.password = Some(relay_config.postgres.password.clone());
@@ -222,7 +222,7 @@ impl PostgresDatabaseService {
 
                 structured_params_for_pref.push(PreferenceParams {
                     public_key: public_key.as_ref(),
-                    filtering: entry.registration_info.preferences.filtering.clone() as i16,
+                    filtering: entry.registration_info.preferences.filtering as i16,
                     trusted_builders: entry.registration_info.preferences.trusted_builders.clone(),
                     header_delay: entry.registration_info.preferences.header_delay,
                 });

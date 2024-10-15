@@ -26,8 +26,7 @@ const NBASE: u64 = 10000;
 /// E.g. some tests have shown that 1000_000_000_000_000_000_000_000_000 is stored as
 /// [0, 1, 0, 6, 0, 0, 0, 0, 3, 232]
 /// sign and dscale are still not used
-
-impl<'a> FromSql<'a> for PostgresNumeric {
+impl FromSql<'_> for PostgresNumeric {
     fn from_sql(_: &tokio_postgres::types::Type, raw: &[u8]) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
         let n_base = U256::from(NBASE);
         let mut offset = 0;
@@ -64,9 +63,11 @@ impl<'a> FromSql<'a> for PostgresNumeric {
 
 /// Implements the `ToSql` trait for `PostgresNumeric`.
 /// Some things to note about this implementation:
+///
 /// - Assumes positive numbers
 /// - Assumes scale of 0
 /// - Assumes weight of 0
+///
 /// As such not generalized, but good enough for our purposes
 /// Allows for MAX_GROUP_COUNT digit groups, each group is a value between 0 and 9999
 /// so the maximum value is NBASE^MAX_GROUP_COUNT - 1
