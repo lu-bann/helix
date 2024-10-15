@@ -34,7 +34,7 @@ pub fn verify_signed_consensus_message<T: HashTreeRoot + Debug>(
     Ok(())
 }
 
-pub fn verify_signed_builder_message<T: HashTreeRoot>(
+pub fn verify_signed_builder_message<T: HashTreeRoot + Debug>(
     message: &mut T,
     signature: &BlsSignature,
     public_key: &BlsPublicKey,
@@ -116,27 +116,38 @@ mod tests {
     use helix_common::api::constraints_api::PreconferElection;
 
     use super::*;
-    // write a test for verify_signed_commit_boost_message
-    // use the following inputs:
-    // {"message":{"preconfer_pubkey":"0xa7c828460fc5c8d24c60f9f30c8836659b60a610fe8b87b26a71e9b765a9d0cae16b1a963f65b3b7abe264cda187c113","slot_number":835704,"chain_id":7014190335,"gas_limit":0},"signature":"0xa6a7607926bb8d2ed4aec913bedd9d26a6b0ce05d4d8c3a887ad7114e315dacd5b5be991f3ed0f795c838b58b75ada4906bc81ece161eb8f5a8516f60560b029f47cfe9f2f7bc3205b75a7857fa87f566de7b8389f41f96791260e51ea066672"}
+    // message: PreconferElection { preconfer_pubkey:
+    // 0xa7c828460fc5c8d24c60f9f30c8836659b60a610fe8b87b26a71e9b765a9d0cae16b1a963f65b3b7abe264cda187c113, slot_number: 835907, chain_id: 7014190335,
+    // gas_limit: 0 }, signature:
+    // 0x98629270f8b4530d049bcbbdb207256c13ad08ad35561687c59cc78f72eb0471681bde0b9b01e809b83b8a633b48ecd0105b331542462654afe15bc194ae0a23074d295277690556b9ea088b127ff4f53dc521fd88b7e4dc90cbe29402bdc959,
+    // public_key: 0xa1154f0998b62bbafff2d3c8e1be4d6486bd738bfa145acd4a666df4681aea8f04ef0ab8f36bfd453c9b3625cb11101e, slot: Some(835901), root:
+    // Some(0x0000000000000000000000000000000000000000000000000000000000000000), fork_version: Some([80, 19, 39, 54]), domain: [109, 109, 111, 67, 39,
+    // 93, 246, 220, 110, 148, 41, 177, 176, 182, 29, 202, 170, 76, 39, 89, 8, 31, 152, 206, 212, 71, 229, 96, 186, 162, 28, 164]
     const PRECONFER_PUBKEY: &str = "0xa7c828460fc5c8d24c60f9f30c8836659b60a610fe8b87b26a71e9b765a9d0cae16b1a963f65b3b7abe264cda187c113";
-    const SLOT_NUMBER: u64 = 835704;
+    const SLOT_NUMBER: u64 = 835907;
     const CHAIN_ID: u64 = 7014190335;
     const GAS_LIMIT: u64 = 0;
-    const SIGNATURE: &str = "0xa6a7607926bb8d2ed4aec913bedd9d26a6b0ce05d4d8c3a887ad7114e315dacd5b5be991f3ed0f795c838b58b75ada4906bc81ece161eb8f5a8516f60560b029f47cfe9f2f7bc3205b75a7857fa87f566de7b8389f41f96791260e51ea066672";
-    const VALIDATOR_PUBKEY: &str = "0xa7c828460fc5c8d24c60f9f30c8836659b60a610fe8b87b26a71e9b765a9d0cae16b1a963f65b3b7abe264cda187c113";
+    // const FORK_VERSION: [u8; 4] = [80, 19, 39, 54];
+    const DOMAIN: [u8; 32] = [
+        109, 109, 111, 67, 39, 93, 246, 220, 110, 148, 41, 177, 176, 182, 29, 202, 170, 76, 39, 89, 8, 31, 152, 206, 212, 71, 229, 96, 186, 162, 28,
+        164,
+    ];
+    const SIGNATURE: &str = "0x98629270f8b4530d049bcbbdb207256c13ad08ad35561687c59cc78f72eb0471681bde0b9b01e809b83b8a633b48ecd0105b331542462654afe15bc194ae0a23074d295277690556b9ea088b127ff4f53dc521fd88b7e4dc90cbe29402bdc959";
+    const VALIDATOR_PUBKEY: &str = "0xa1154f0998b62bbafff2d3c8e1be4d6486bd738bfa145acd4a666df4681aea8f04ef0ab8f36bfd453c9b3625cb11101e";
     #[test]
     fn test_verify_cb_signature() {
         // use the following inputs:
         let message = PreconferElection {
-            preconfer_pubkey: BlsPublicKey::try_from(PRECONFER_PUBKEY.as_bytes()).unwrap(),
+            preconfer_pubkey: BlsPublicKey::try_from(hex::decode(PRECONFER_PUBKEY.trim_start_matches("0x")).unwrap().as_slice()).unwrap(),
             slot_number: SLOT_NUMBER,
             chain_id: CHAIN_ID,
             gas_limit: GAS_LIMIT,
         };
-        let signature = BlsSignature::try_from(SIGNATURE.as_bytes()).unwrap();
-        let public_key = BlsPublicKey::try_from(VALIDATOR_PUBKEY.as_bytes()).unwrap();
-        let result = verify_signed_data(&message, &signature, &BlsPublicKey::from(public_key), Domain::default());
+        let signature = BlsSignature::try_from(hex::decode(SIGNATURE.trim_start_matches("0x")).unwrap().as_slice()).unwrap();
+        let public_key = BlsPublicKey::try_from(hex::decode(VALIDATOR_PUBKEY.trim_start_matches("0x")).unwrap().as_slice()).unwrap();
+        let domain: Domain = DOMAIN;
+        let result = verify_signed_data(&message, &signature, &BlsPublicKey::from(public_key), domain);
+        println!("result: {:?}", result);
         // assert the result
         assert!(result.is_ok());
     }
