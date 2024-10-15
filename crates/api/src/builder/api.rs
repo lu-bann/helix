@@ -35,7 +35,7 @@ use helix_common::{
 use helix_database::DatabaseService;
 use helix_datastore::{constraints::ConstraintsAuctioneer, types::SaveBidAndUpdateTopBidResponse, Auctioneer};
 use helix_housekeeper::{ChainUpdate, PayloadAttributesUpdate, SlotUpdate};
-use helix_utils::{calculate_withdrawals_root, get_payload_attributes_key, has_reached_fork};
+use helix_utils::{get_payload_attributes_key, has_reached_fork};
 use hyper::HeaderMap;
 use tokio::{
     sync::{
@@ -1678,20 +1678,41 @@ fn sanity_check_block_submission(
         });
     }
 
-    if has_reached_fork(payload.slot(), CAPELLA_FORK_EPOCH) && payload.is_full_payload() {
-        let payload_withdrawals = match payload.withdrawals() {
-            Some(w) => w,
-            None => return Err(BuilderApiError::MissingWithdrawls),
-        };
+    if has_reached_fork(payload.slot(), CAPELLA_FORK_EPOCH) {
+        if payload.is_full_payload() {
+            let withdrawals_root = match payload.withdrawals_root() {
+                Some(w) => w,
+                None => return Err(BuilderApiError::MissingWithdrawls),
+            };
 
-        let withdrawals_root = calculate_withdrawals_root(payload_withdrawals);
-        let expected_withdrawals_root = match payload_attributes.withdrawals_root {
-            Some(wr) => wr,
-            None => return Err(BuilderApiError::MissingWithdrawls),
-        };
+            let expected_withdrawals_root = match payload_attributes.withdrawals_root {
+                Some(wr) => wr,
+                None => return Err(BuilderApiError::MissingWithdrawls),
+            };
 
-        if withdrawals_root != expected_withdrawals_root {
-            return Err(BuilderApiError::WithdrawalsRootMismatch { got: withdrawals_root, expected: expected_withdrawals_root });
+            if withdrawals_root != expected_withdrawals_root {
+                return Err(BuilderApiError::WithdrawalsRootMismatch {
+                    got: Hash32::try_from(withdrawals_root.as_ref()).unwrap(),
+                    expected: Hash32::try_from(expected_withdrawals_root.as_ref()).unwrap(),
+                });
+            }
+        } else {
+            let expected_withdrawals_root = match payload_attributes.withdrawals_root {
+                Some(wr) => wr,
+                None => return Err(BuilderApiError::MissingWithdrawlsRoot),
+            };
+
+            let payload_withdrawals_root = match payload.withdrawals_root() {
+                Some(wr) => wr,
+                None => return Err(BuilderApiError::MissingWithdrawlsRoot),
+            };
+
+            if payload_withdrawals_root != expected_withdrawals_root {
+                return Err(BuilderApiError::WithdrawalsRootMismatch {
+                    got: Hash32::try_from(payload_withdrawals_root.as_ref()).unwrap(),
+                    expected: Hash32::try_from(expected_withdrawals_root.as_ref()).unwrap(),
+                });
+            }
         }
     }
 
