@@ -883,7 +883,12 @@ where
         let head_epoch = head_slot / SLOTS_PER_EPOCH;
         let request_epoch = election_req.slot() / SLOTS_PER_EPOCH;
         if request_epoch != head_epoch + 1 {
-            return Err(ProposerApiError::ElectPreconferRequestForInvalidEpoch { request_epoch, head_epoch });
+            return Err(ProposerApiError::ElectPreconferRequestForInvalidEpoch {
+                request_epoch,
+                head_epoch,
+                request_slot: election_req.slot(),
+                head_slot,
+            });
         }
 
         let duties_read_guard = self.proposer_duties.read().await;

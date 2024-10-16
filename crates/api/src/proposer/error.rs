@@ -103,8 +103,8 @@ pub enum ProposerApiError {
     #[error("request for past slot. request slot: {request_slot}, head slot: {head_slot}")]
     RequestForPastSlot { request_slot: u64, head_slot: u64 },
 
-    #[error("preconfer election must be for current epoch + 1. request epoch: {request_epoch}, current epoch: {head_epoch}")]
-    ElectPreconferRequestForInvalidEpoch { request_epoch: u64, head_epoch: u64 },
+    #[error("preconfer election must be for current epoch + 1. request epoch: {request_epoch}, current epoch: {head_epoch}, request slot: {request_slot}, head slot: {head_slot}")]
+    ElectPreconferRequestForInvalidEpoch { request_epoch: u64, head_epoch: u64, request_slot: u64, head_slot: u64 },
 
     #[error("slot is too new")]
     SlotTooNew,
@@ -318,9 +318,9 @@ impl IntoResponse for ProposerApiError {
             ProposerApiError::ProposerDutyNotFound { slot } => {
                 (StatusCode::BAD_REQUEST, format!("proposer duty not found. slot: {slot}")).into_response()
             }
-            ProposerApiError::ElectPreconferRequestForInvalidEpoch { request_epoch, head_epoch } => (
+            ProposerApiError::ElectPreconferRequestForInvalidEpoch { request_epoch, head_epoch, request_slot, head_slot } => (
                 StatusCode::BAD_REQUEST,
-                format!("preconfer election must be for current epoch + 1. request epoch: {request_epoch}, current epoch: {head_epoch}"),
+                format!("preconfer election must be for current epoch + 1. request epoch: {request_epoch}, current epoch: {head_epoch}, request slot: {request_slot}, head slot: {head_slot}."),
             )
                 .into_response(),
             ProposerApiError::ConstraintsAlreadySet { slot } => {

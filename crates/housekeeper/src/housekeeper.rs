@@ -187,7 +187,7 @@ impl<DB: DatabaseService, BeaconClient: MultiBeaconClientTrait, A: Auctioneer> H
         }
 
         let current_epoch = head_slot / EPOCH_SLOTS;
-        debug!(epoch = current_epoch, slot_start_next_epoch = (current_epoch + 1) * EPOCH_SLOTS, head_slot = head_slot, "updated head slot",);
+        info!(epoch = current_epoch, slot_start_next_epoch = (current_epoch + 1) * EPOCH_SLOTS, head_slot = head_slot, "updated head slot",);
     }
 
     /// Update the head slot and return whether the given slot is a new block.
@@ -334,7 +334,7 @@ impl<DB: DatabaseService, BeaconClient: MultiBeaconClientTrait, A: Auctioneer> H
 
         let epoch = head_slot / EPOCH_SLOTS;
 
-        info!(epoch_from = epoch, epoch_to = epoch + 1, "Housekeeper::update_proposer_duties",);
+        info!(epoch_from = epoch, epoch_to = epoch + 1, head_slot = head_slot, "Housekeeper::update_proposer_duties",);
 
         let proposer_duties = match self.fetch_duties(epoch).await {
             Ok(proposer_duties) => proposer_duties,
