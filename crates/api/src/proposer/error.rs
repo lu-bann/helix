@@ -190,8 +190,8 @@ pub enum ProposerApiError {
     #[error("validator is not proposer for requested slot")]
     ValidatorIsNotProposerForRequestedSlot,
 
-    #[error("proposer duty not found. slot: {slot}")]
-    ProposerDutyNotFound { slot: u64 },
+    #[error("proposer duty not found. slot: {slot}, head slot: {head_slot}")]
+    ProposerDutyNotFound { slot: u64, head_slot: u64 },
 
     #[error("constraints are already set for slot {slot}")]
     ConstraintsAlreadySet { slot: u64 },
@@ -315,8 +315,8 @@ impl IntoResponse for ProposerApiError {
             ProposerApiError::ValidatorIsNotProposerForRequestedSlot => {
                 (StatusCode::BAD_REQUEST, "validator is not proposer for requested slot").into_response()
             }
-            ProposerApiError::ProposerDutyNotFound { slot } => {
-                (StatusCode::BAD_REQUEST, format!("proposer duty not found. slot: {slot}")).into_response()
+            ProposerApiError::ProposerDutyNotFound { slot, head_slot } => {
+                (StatusCode::BAD_REQUEST, format!("proposer duty not found. slot: {slot}, head slot: {head_slot}")).into_response()
             }
             ProposerApiError::ElectPreconferRequestForInvalidEpoch { request_epoch, head_epoch, request_slot, head_slot } => (
                 StatusCode::BAD_REQUEST,

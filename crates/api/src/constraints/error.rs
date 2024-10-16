@@ -49,8 +49,8 @@ pub enum ConstraintsApiError {
     #[error("can only set constraints for current slot. request slot: {request_slot}, curr slot: {curr_slot}")]
     CanOnlySetConstraintsForCurrentSlot { request_slot: u64, curr_slot: u64 },
 
-    #[error("proposer duty not found. slot: {slot}, validator_index: {validator_index}")]
-    ProposerDutyNotFound { slot: u64, validator_index: usize },
+    #[error("proposer duty not found. slot: {slot}, head_slot: {head_slot}, validator_index: {validator_index}")]
+    ProposerDutyNotFound { slot: u64, head_slot: u64, validator_index: usize },
 
     #[error("not preconfer. request public key: {request_public_key:?}, preconfer public key: {preconfer_public_key:?}")]
     NotPreconfer { request_public_key: BlsPublicKey, preconfer_public_key: BlsPublicKey },
@@ -88,9 +88,11 @@ impl IntoResponse for ConstraintsApiError {
                 (StatusCode::BAD_REQUEST, format!("can only set constraints for current slot. request slot: {request_slot}, curr slot: {curr_slot}"))
                     .into_response()
             }
-            ConstraintsApiError::ProposerDutyNotFound { slot, validator_index } => {
-                (StatusCode::BAD_REQUEST, format!("proposer duty not found. slot: {slot}, validator_index: {validator_index}")).into_response()
-            }
+            ConstraintsApiError::ProposerDutyNotFound { slot, head_slot, validator_index } => (
+                StatusCode::BAD_REQUEST,
+                format!("proposer duty not found. slot: {slot}, head_slot: {head_slot}, validator_index: {validator_index}"),
+            )
+                .into_response(),
             ConstraintsApiError::NotPreconfer { request_public_key, preconfer_public_key } => (
                 StatusCode::BAD_REQUEST,
                 format!("not preconfer. request public key: {request_public_key:?}, preconfer public key: {preconfer_public_key:?}"),

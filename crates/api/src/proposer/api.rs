@@ -897,7 +897,7 @@ where
         let proposer_pub_key = match duties_read_guard.iter().find(|duty| duty.slot == election_req.slot()) {
             Some(slot_duty) => slot_duty.entry.registration.message.public_key.clone(),
             None => {
-                return Err(ProposerApiError::ProposerDutyNotFound { slot: election_req.slot() });
+                return Err(ProposerApiError::ProposerDutyNotFound { slot: election_req.slot(), head_slot });
             }
         };
 
