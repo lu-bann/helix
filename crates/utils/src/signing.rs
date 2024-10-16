@@ -116,24 +116,17 @@ mod tests {
     use helix_common::api::constraints_api::PreconferElection;
 
     use super::*;
-    // message: PreconferElection { preconfer_pubkey:
-    // 0xa7c828460fc5c8d24c60f9f30c8836659b60a610fe8b87b26a71e9b765a9d0cae16b1a963f65b3b7abe264cda187c113, slot_number: 835907, chain_id: 7014190335,
-    // gas_limit: 0 }, signature:
-    // 0x98629270f8b4530d049bcbbdb207256c13ad08ad35561687c59cc78f72eb0471681bde0b9b01e809b83b8a633b48ecd0105b331542462654afe15bc194ae0a23074d295277690556b9ea088b127ff4f53dc521fd88b7e4dc90cbe29402bdc959,
-    // public_key: 0xa1154f0998b62bbafff2d3c8e1be4d6486bd738bfa145acd4a666df4681aea8f04ef0ab8f36bfd453c9b3625cb11101e, slot: Some(835901), root:
-    // Some(0x0000000000000000000000000000000000000000000000000000000000000000), fork_version: Some([80, 19, 39, 54]), domain: [109, 109, 111, 67, 39,
-    // 93, 246, 220, 110, 148, 41, 177, 176, 182, 29, 202, 170, 76, 39, 89, 8, 31, 152, 206, 212, 71, 229, 96, 186, 162, 28, 164]
+    // DENEB_FORK_VERSION: 0x50132736
+    // GENESIS_FORK_VERSION: 0x10000000
+    // domain mask: [109, 109, 111, 67]
+    // signing domain: [109, 109, 111, 67, 148, 196, 26, 244, 132, 255, 247, 150, 73, 105, 224, 189, 217, 34, 248, 45, 255, 15, 75, 232, 122, 96, 208, 102, 76, 201, 209, 255]
     const PRECONFER_PUBKEY: &str = "0xa7c828460fc5c8d24c60f9f30c8836659b60a610fe8b87b26a71e9b765a9d0cae16b1a963f65b3b7abe264cda187c113";
-    const SLOT_NUMBER: u64 = 835907;
+    const SLOT_NUMBER: u64 = 836343;
     const CHAIN_ID: u64 = 7014190335;
     const GAS_LIMIT: u64 = 0;
-    // const FORK_VERSION: [u8; 4] = [80, 19, 39, 54];
-    const DOMAIN: [u8; 32] = [
-        109, 109, 111, 67, 39, 93, 246, 220, 110, 148, 41, 177, 176, 182, 29, 202, 170, 76, 39, 89, 8, 31, 152, 206, 212, 71, 229, 96, 186, 162, 28,
-        164,
-    ];
-    const SIGNATURE: &str = "0x98629270f8b4530d049bcbbdb207256c13ad08ad35561687c59cc78f72eb0471681bde0b9b01e809b83b8a633b48ecd0105b331542462654afe15bc194ae0a23074d295277690556b9ea088b127ff4f53dc521fd88b7e4dc90cbe29402bdc959";
-    const VALIDATOR_PUBKEY: &str = "0xa1154f0998b62bbafff2d3c8e1be4d6486bd738bfa145acd4a666df4681aea8f04ef0ab8f36bfd453c9b3625cb11101e";
+    const DOMAIN: [u8; 32] = [109, 109, 111, 67, 148, 196, 26, 244, 132, 255, 247, 150, 73, 105, 224, 189, 217, 34, 248, 45, 255, 15, 75, 232, 122, 96, 208, 102, 76, 201, 209, 255];
+    const SIGNATURE: &str = "0xa40574565c4c6e0fa79595f62e459b515c8dece2bf9f55e8bc26fd4a7052d1983a3f665112e1a7ccf70aba84d19bf1f21355f5c7bb784f51d3600469aebf9010ee8292e2dd9224410dd437102283dc90e681ba5799ab8eed07283bbb9ac1193e";
+    const VALIDATOR_PUBKEY: &str = "0xb07a8c8c3b4d265a909ceaed1e9c25e0799c5c65c9639c3edd81f9421982aa25088f0fe9453ec36ddf1ba6d024bef004";
     #[test]
     fn test_verify_cb_signature() {
         // use the following inputs:
@@ -147,7 +140,6 @@ mod tests {
         let public_key = BlsPublicKey::try_from(hex::decode(VALIDATOR_PUBKEY.trim_start_matches("0x")).unwrap().as_slice()).unwrap();
         let domain: Domain = DOMAIN;
         let result = verify_signed_data(&message, &signature, &BlsPublicKey::from(public_key), domain);
-        println!("result: {:?}", result);
         // assert the result
         assert!(result.is_ok());
     }
