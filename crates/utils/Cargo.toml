@@ -19,3 +19,7 @@ reth-primitives.workspace = true
 http.workspace = true
 reqwest.workspace = true
 axum.workspace = true
+
+[dev-dependencies]
+helix-common = { workspace = true }
+hex = { workspace = true }

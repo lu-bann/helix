@@ -46,12 +46,13 @@ pub fn verify_signed_commit_boost_message<T: HashTreeRoot>(
     message: &mut T,
     signature: &BlsSignature,
     public_key: &BlsPublicKey,
-    slot_hint: Option<Slot>,
+    _slot_hint: Option<Slot>,
     root_hint: Option<Root>,
     context: &Context,
 ) -> Result<(), Error> {
-    let fork_version = slot_hint.map(|slot| context.fork_version_for(context.fork_for(slot)));
-    let domain = compute_commit_boost_domain(fork_version, root_hint, context)?;
+    // let fork_version = slot_hint.map(|slot| context.fork_version_for(context.fork_for(slot)));
+    let fork_version = context.genesis_fork_version;
+    let domain = compute_commit_boost_domain(Some(fork_version), root_hint, context)?;
     verify_signed_data(message, signature, public_key, domain)?;
     Ok(())
 }
@@ -102,4 +103,42 @@ pub fn compute_custom_domain(
     domain[..4].copy_from_slice(domain_mask);
     domain[4..].copy_from_slice(&fork_data_root[..28]);
     Ok(domain)
+}
+
+#[cfg(test)]
+mod tests {
+    use helix_common::api::constraints_api::PreconferElection;
+
+    use super::*;
+    // DENEB_FORK_VERSION: 0x50132736
+    // GENESIS_FORK_VERSION: 0x10000000
+    // domain mask: [109, 109, 111, 67]
+    // signing domain: [109, 109, 111, 67, 148, 196, 26, 244, 132, 255, 247, 150, 73, 105, 224, 189, 217, 34, 248, 45, 255, 15, 75, 232, 122, 96, 208,
+    // 102, 76, 201, 209, 255]
+    const PRECONFER_PUBKEY: &str = "0xa7c828460fc5c8d24c60f9f30c8836659b60a610fe8b87b26a71e9b765a9d0cae16b1a963f65b3b7abe264cda187c113";
+    const SLOT_NUMBER: u64 = 836343;
+    const CHAIN_ID: u64 = 7014190335;
+    const GAS_LIMIT: u64 = 0;
+    const DOMAIN: [u8; 32] = [
+        109, 109, 111, 67, 148, 196, 26, 244, 132, 255, 247, 150, 73, 105, 224, 189, 217, 34, 248, 45, 255, 15, 75, 232, 122, 96, 208, 102, 76, 201,
+        209, 255,
+    ];
+    const SIGNATURE: &str = "0xa40574565c4c6e0fa79595f62e459b515c8dece2bf9f55e8bc26fd4a7052d1983a3f665112e1a7ccf70aba84d19bf1f21355f5c7bb784f51d3600469aebf9010ee8292e2dd9224410dd437102283dc90e681ba5799ab8eed07283bbb9ac1193e";
+    const VALIDATOR_PUBKEY: &str = "0xb07a8c8c3b4d265a909ceaed1e9c25e0799c5c65c9639c3edd81f9421982aa25088f0fe9453ec36ddf1ba6d024bef004";
+    #[test]
+    fn test_verify_cb_signature() {
+        // use the following inputs:
+        let message = PreconferElection {
+            preconfer_pubkey: BlsPublicKey::try_from(hex::decode(PRECONFER_PUBKEY.trim_start_matches("0x")).unwrap().as_slice()).unwrap(),
+            slot_number: SLOT_NUMBER,
+            chain_id: CHAIN_ID,
+            gas_limit: GAS_LIMIT,
+        };
+        let signature = BlsSignature::try_from(hex::decode(SIGNATURE.trim_start_matches("0x")).unwrap().as_slice()).unwrap();
+        let public_key = BlsPublicKey::try_from(hex::decode(VALIDATOR_PUBKEY.trim_start_matches("0x")).unwrap().as_slice()).unwrap();
+        let domain: Domain = DOMAIN;
+        let result = verify_signed_data(&message, &signature, &BlsPublicKey::from(public_key), domain);
+        // assert the result
+        assert!(result.is_ok());
+    }
 }
