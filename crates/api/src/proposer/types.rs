@@ -18,7 +18,7 @@ pub(crate) const PATH_REGISTER_VALIDATORS: &str = "/validators";
 pub(crate) const PATH_GET_HEADER: &str = "/header/:slot/:parent_hash/:pubkey";
 pub(crate) const PATH_GET_PAYLOAD: &str = "/blinded_blocks";
 
-pub(crate) const GET_HEADER_REQUEST_CUTOFF_MS: i64 = 3000;
+pub(crate) const GET_HEADER_REQUEST_CUTOFF_MS: i64 = 61000;
 
 #[derive(Debug, Deserialize)]
 pub struct GetHeaderParams {
