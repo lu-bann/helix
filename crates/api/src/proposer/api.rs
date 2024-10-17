@@ -835,7 +835,8 @@ where
         }
 
         // Constraints cannot be set more than `SET_CONSTRAINTS_CUTOFF_NS` into the requested slot.
-        let slot_start_timestamp = self.chain_info.genesis_time_in_secs + (constraints.slot() * self.chain_info.seconds_per_slot);
+        let slot_start_timestamp =
+            self.chain_info.genesis_time_in_secs + (constraints.slot() * self.chain_info.seconds_per_slot) + self.chain_info.context.genesis_delay;
         let ns_into_slot = (receive_ns as i64).saturating_sub((slot_start_timestamp * 1_000_000_000) as i64);
         if ns_into_slot > SET_CONSTRAINTS_CUTOFF_NS {
             return Err(ProposerApiError::SetConstraintsTooLate { ns_into_slot: ns_into_slot as u64, cutoff: SET_CONSTRAINTS_CUTOFF_NS as u64 });

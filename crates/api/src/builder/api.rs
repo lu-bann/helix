@@ -1646,13 +1646,15 @@ fn sanity_check_block_submission(
     payload_attributes: &PayloadAttributesUpdate,
     chain_info: &ChainInfo,
 ) -> Result<(), BuilderApiError> {
-    let expected_timestamp = chain_info.genesis_time_in_secs + (bid_trace.slot * SECONDS_PER_SLOT);
-    info!(
+    let genesis_delay = chain_info.context.genesis_delay;
+    let expected_timestamp = chain_info.genesis_time_in_secs + (bid_trace.slot * SECONDS_PER_SLOT) + genesis_delay;
+    debug!(
         genesis_time_in_secs = chain_info.genesis_time_in_secs,
         bid_trace_slot = bid_trace.slot,
         seconds_per_slot = SECONDS_PER_SLOT,
         expected_timestamp = expected_timestamp,
         payload_timestamp = payload.timestamp(),
+        genesis_delay = genesis_delay,
         "sanity check timestamp"
     );
     if payload.timestamp() != expected_timestamp {
