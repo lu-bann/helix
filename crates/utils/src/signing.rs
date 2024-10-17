@@ -8,6 +8,7 @@ use ethereum_consensus::{
     state_transition::Context,
     Error, Fork,
 };
+use reth_primitives::hex;
 use tracing::info;
 
 pub fn verify_signed_consensus_message<T: HashTreeRoot>(
@@ -19,12 +20,22 @@ pub fn verify_signed_consensus_message<T: HashTreeRoot>(
     root_hint: Option<Root>,
 ) -> Result<(), Error> {
     let fork_version = slot_hint.map(|slot| match context.fork_for(slot) {
-        Fork::Bellatrix => context.bellatrix_fork_version,
-        Fork::Capella => context.capella_fork_version,
-        Fork::Deneb => context.deneb_fork_version,
+        Fork::Bellatrix => {
+            info!("using bellatrix fork version");
+            context.bellatrix_fork_version
+        }
+        Fork::Capella => {
+            info!("using capella fork version");
+            context.capella_fork_version
+        }
+        Fork::Deneb => {
+            info!("using deneb fork version");
+            context.deneb_fork_version
+        }
         _ => unimplemented!("Fork {:?} is not supported", context.fork_for(slot)),
     });
     let domain = compute_domain(DomainType::BeaconProposer, fork_version, root_hint, context).unwrap();
+    info!(domain = hex::encode(domain.as_ref()), "computed domain");
     verify_signed_data(message, signature, public_key, domain)?;
     Ok(())
 }

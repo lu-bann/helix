@@ -1037,12 +1037,15 @@ where
         let slot = signed_blinded_beacon_block.message().slot();
         match signed_blinded_beacon_block {
             SignedBlindedBeaconBlock::Bellatrix(block) => {
+                info!("verifying bellatrix blinded block signature");
                 verify_signed_consensus_message(&mut block.message, &block.signature, public_key, context, Some(slot), Some(genesis_validators_root))
             }
             SignedBlindedBeaconBlock::Capella(block) => {
+                info!("verifying capella blinded block signature");
                 verify_signed_consensus_message(&mut block.message, &block.signature, public_key, context, Some(slot), Some(genesis_validators_root))
             }
             SignedBlindedBeaconBlock::Deneb(block) => {
+                info!("verifying deneb blinded block signature");
                 verify_signed_consensus_message(&mut block.message, &block.signature, public_key, context, Some(slot), Some(genesis_validators_root))
             }
         }
