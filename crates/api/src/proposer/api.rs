@@ -54,6 +54,7 @@ use crate::{
         api::{MAX_GATEWAY_ELECTION_SIZE, MAX_SET_CONSTRAINTS_SIZE},
         SET_CONSTRAINTS_CUTOFF_NS,
     },
+    get_genesis_time,
     gossiper::{
         traits::GossipClientTrait,
         types::{BroadcastGetPayloadParams, GossipedMessage},
@@ -849,7 +850,8 @@ where
         }
 
         // Constraints cannot be set more than `SET_CONSTRAINTS_CUTOFF_NS` into the requested slot.
-        let slot_start_timestamp = self.chain_info.genesis_time_in_secs + (constraints.slot() * self.chain_info.seconds_per_slot);
+        let genesis_time = get_genesis_time(&self.chain_info);
+        let slot_start_timestamp = genesis_time + (constraints.slot() * self.chain_info.seconds_per_slot);
         let ns_into_slot = (receive_ns as i64).saturating_sub((slot_start_timestamp * 1_000_000_000) as i64);
         if ns_into_slot > SET_CONSTRAINTS_CUTOFF_NS {
             return Err(ProposerApiError::SetConstraintsTooLate { ns_into_slot: ns_into_slot as u64, cutoff: SET_CONSTRAINTS_CUTOFF_NS as u64 });
@@ -1319,7 +1321,8 @@ where
 
 /// Calculates the time information for a given slot.
 fn calculate_slot_time_info(chain_info: &ChainInfo, slot: u64, request_time: u64) -> (i64, Duration) {
-    let slot_start_timestamp_in_secs = chain_info.genesis_time_in_secs + (slot * chain_info.seconds_per_slot);
+    let genesis_time = get_genesis_time(chain_info);
+    let slot_start_timestamp_in_secs = genesis_time + (slot * chain_info.seconds_per_slot);
     let ms_into_slot = (request_time / 1_000_000) as i64 - (slot_start_timestamp_in_secs * 1000) as i64;
     let duration_until_slot_start = chain_info.clock.duration_until_slot(slot);
 
