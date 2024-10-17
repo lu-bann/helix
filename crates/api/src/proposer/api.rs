@@ -1284,7 +1284,7 @@ where
 
 /// Calculates the time information for a given slot.
 fn calculate_slot_time_info(chain_info: &ChainInfo, slot: u64, request_time: u64) -> (i64, Duration) {
-    let slot_start_timestamp_in_secs = chain_info.genesis_time_in_secs + (slot * chain_info.seconds_per_slot);
+    let slot_start_timestamp_in_secs = chain_info.genesis_time_in_secs + (slot * chain_info.seconds_per_slot) + chain_info.context.genesis_delay;
     let ms_into_slot = (request_time / 1_000_000) as i64 - (slot_start_timestamp_in_secs * 1000) as i64;
     let duration_until_slot_start = chain_info.clock.duration_until_slot(slot);
 
