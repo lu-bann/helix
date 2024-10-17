@@ -44,13 +44,13 @@ impl SignedPreconferElection {
 #[derive(Debug, Default, Clone, SimpleSerialize, serde::Serialize, serde::Deserialize)]
 pub struct PreconferElection {
     /// Public key of the preconfer proposing for `slot`.
-    preconfer_pubkey: BlsPublicKey,
+    pub preconfer_pubkey: BlsPublicKey,
     /// Slot this delegation is valid for.
-    slot_number: u64,
+    pub slot_number: u64,
     /// Chain ID of the chain this election is for.
-    chain_id: u64,
-    // The gas limit specified by the proposer that the preconfer must adhere to.
-    gas_limit: u64,
+    pub chain_id: u64,
+    /// The gas limit specified by the proposer that the preconfer must adhere to.
+    pub gas_limit: u64,
 }
 
 impl PreconferElection {

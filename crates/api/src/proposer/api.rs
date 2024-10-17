@@ -904,7 +904,6 @@ where
             &mut election_req.message,
             &election_req.signature,
             &proposer_pub_key,
-            Some(head_slot),
             Some(self.chain_info.genesis_validators_root),
             &self.chain_info.context,
         ) {

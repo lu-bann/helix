@@ -2607,6 +2607,8 @@ version = "0.0.1"
 dependencies = [
  "axum 0.7.7",
  "ethereum-consensus 0.1.1 (git+https://github.com/ralexstokes/ethereum-consensus?rev=cf3c404043230559660810bc0c9d6d5a8498d819)",
+ "helix-common",
+ "hex",
  "http 1.1.0",
  "reqwest",
  "reth-primitives 1.0.7",
