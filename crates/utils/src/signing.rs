@@ -46,11 +46,9 @@ pub fn verify_signed_commit_boost_message<T: HashTreeRoot>(
     message: &mut T,
     signature: &BlsSignature,
     public_key: &BlsPublicKey,
-    _slot_hint: Option<Slot>,
     root_hint: Option<Root>,
     context: &Context,
 ) -> Result<(), Error> {
-    // let fork_version = slot_hint.map(|slot| context.fork_version_for(context.fork_for(slot)));
     let fork_version = context.genesis_fork_version;
     let domain = compute_commit_boost_domain(Some(fork_version), root_hint, context)?;
     verify_signed_data(message, signature, public_key, domain)?;
