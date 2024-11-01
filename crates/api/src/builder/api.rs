@@ -27,6 +27,7 @@ use helix_common::{
     },
     bid_submission::{v2::header_submission::SignedHeaderSubmission, BidSubmission, BidTrace, SignedBidSubmission},
     chain_info::ChainInfo,
+    get_genesis_time_with_delay,
     signing::RelaySigningContext,
     simulator::BlockSimError,
     versioned_payload::PayloadAndBlobs,
@@ -49,7 +50,6 @@ use uuid::Uuid;
 
 use crate::{
     builder::{error::BuilderApiError, traits::BlockSimulator, BlockSimRequest, DbInfo, OptimisticVersion},
-    get_genesis_time,
     gossiper::{
         traits::GossipClientTrait,
         types::{BroadcastHeaderParams, BroadcastPayloadParams, GossipedMessage},
@@ -1647,7 +1647,7 @@ fn sanity_check_block_submission(
     payload_attributes: &PayloadAttributesUpdate,
     chain_info: &ChainInfo,
 ) -> Result<(), BuilderApiError> {
-    let genesis_time = get_genesis_time(chain_info);
+    let genesis_time = get_genesis_time_with_delay(chain_info);
     let expected_timestamp = genesis_time + (bid_trace.slot * chain_info.seconds_per_slot);
     if payload.timestamp() != expected_timestamp {
         return Err(BuilderApiError::IncorrectTimestamp { got: payload.timestamp(), expected: expected_timestamp });

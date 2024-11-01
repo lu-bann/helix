@@ -13,6 +13,7 @@ use helix_common::{
     api::builder_api::BuilderGetValidatorsResponseEntry,
     bellatrix::{List, Node},
     chain_info::ChainInfo,
+    get_genesis_time_with_delay,
 };
 use helix_database::DatabaseService;
 use helix_utils::{get_payload_attributes_key, has_reached_fork};
@@ -127,7 +128,8 @@ impl<D: DatabaseService> ChainEventUpdater<D> {
 
         // Validate this isn't a faulty head slot
         if let Ok(current_timestamp) = SystemTime::now().duration_since(UNIX_EPOCH) {
-            let slot_timestamp = self.chain_info.genesis_time_in_secs + (event.slot * self.chain_info.seconds_per_slot);
+            let genesis_time = get_genesis_time_with_delay(&self.chain_info);
+            let slot_timestamp = genesis_time + (event.slot * self.chain_info.seconds_per_slot);
             if slot_timestamp > current_timestamp.as_secs() + MAX_DISTANCE_FOR_FUTURE_SLOT {
                 warn!(head_slot = event.slot, "head event slot is too far in the future",);
                 return;

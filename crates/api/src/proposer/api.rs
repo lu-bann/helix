@@ -29,6 +29,7 @@ use helix_common::{
     beacon_api::PublishBlobsRequest,
     chain_info::{ChainInfo, Network},
     deneb::{BlobSidecars, BuildBlobSidecarError},
+    get_genesis_time_with_delay,
     signed_proposal::VersionedSignedProposal,
     traces::constraints_api::{ElectGatewayTrace, SetConstraintsTrace},
     try_execution_header_from_payload,
@@ -54,7 +55,6 @@ use crate::{
         api::{MAX_GATEWAY_ELECTION_SIZE, MAX_SET_CONSTRAINTS_SIZE},
         SET_CONSTRAINTS_CUTOFF_NS,
     },
-    get_genesis_time,
     gossiper::{
         traits::GossipClientTrait,
         types::{BroadcastGetPayloadParams, GossipedMessage},
@@ -850,7 +850,7 @@ where
         }
 
         // Constraints cannot be set more than `SET_CONSTRAINTS_CUTOFF_NS` into the requested slot.
-        let genesis_time = get_genesis_time(&self.chain_info);
+        let genesis_time = get_genesis_time_with_delay(&self.chain_info);
         let slot_start_timestamp = genesis_time + (constraints.slot() * self.chain_info.seconds_per_slot);
         let ns_into_slot = (receive_ns as i64).saturating_sub((slot_start_timestamp * 1_000_000_000) as i64);
         if ns_into_slot > SET_CONSTRAINTS_CUTOFF_NS {
@@ -967,7 +967,8 @@ where
     /// - Only allows requests for the current slot until a certain cutoff time.
     fn validate_bid_request_time(&self, bid_request: &BidRequest) -> Result<(), ProposerApiError> {
         let curr_timestamp_ms = get_millis_timestamp()? as i64;
-        let slot_start_timestamp = self.chain_info.genesis_time_in_secs + (bid_request.slot * self.chain_info.seconds_per_slot);
+        let genesis_time = get_genesis_time_with_delay(&self.chain_info);
+        let slot_start_timestamp = genesis_time + (bid_request.slot * self.chain_info.seconds_per_slot);
         let ms_into_slot = curr_timestamp_ms.saturating_sub((slot_start_timestamp * 1000) as i64);
 
         if ms_into_slot > GET_HEADER_REQUEST_CUTOFF_MS {
@@ -1161,8 +1162,8 @@ where
         request_id: &Uuid,
     ) -> Result<PayloadAndBlobs, ProposerApiError> {
         const RETRY_DELAY: Duration = Duration::from_millis(20);
-
-        let slot_time = self.chain_info.genesis_time_in_secs + (slot * self.chain_info.seconds_per_slot);
+        let genesis_time = get_genesis_time_with_delay(&self.chain_info);
+        let slot_time = genesis_time + (slot * self.chain_info.seconds_per_slot);
         let slot_cutoff_millis = (slot_time * 1000) + GET_PAYLOAD_REQUEST_CUTOFF_MS as u64;
 
         let mut last_error: Option<ProposerApiError> = None;
@@ -1321,7 +1322,7 @@ where
 
 /// Calculates the time information for a given slot.
 fn calculate_slot_time_info(chain_info: &ChainInfo, slot: u64, request_time: u64) -> (i64, Duration) {
-    let genesis_time = get_genesis_time(chain_info);
+    let genesis_time = get_genesis_time_with_delay(chain_info);
     let slot_start_timestamp_in_secs = genesis_time + (slot * chain_info.seconds_per_slot);
     let ms_into_slot = (request_time / 1_000_000) as i64 - (slot_start_timestamp_in_secs * 1000) as i64;
     let duration_until_slot_start = chain_info.clock.duration_until_slot(slot);
