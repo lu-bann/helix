@@ -29,7 +29,7 @@ use uuid::Uuid;
 
 use crate::constraints::error::ConstraintsApiError;
 
-pub(crate) const MAX_GATEWAY_ELECTION_SIZE: usize = 1024 * 1024; // TODO: this should be a fixed size that we calc
+// pub(crate) const MAX_GATEWAY_ELECTION_SIZE: usize = 1024 * 1024; // TODO: this should be a fixed size that we calc
 pub(crate) const MAX_SET_CONSTRAINTS_SIZE: usize = 1024 * 1024; // TODO: this should be a fixed size that we calc
 
 /// Information about the current head slot and next elected gateway.

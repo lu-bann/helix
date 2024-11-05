@@ -127,6 +127,7 @@ mod tests {
     fn test_verify_cb_signature() {
         // use the following inputs:
         let message = PreconferElection {
+            proposer_pubkey: BlsPublicKey::try_from(hex::decode(VALIDATOR_PUBKEY.trim_start_matches("0x")).unwrap().as_slice()).unwrap(),
             preconfer_pubkey: BlsPublicKey::try_from(hex::decode(PRECONFER_PUBKEY.trim_start_matches("0x")).unwrap().as_slice()).unwrap(),
             slot_number: SLOT_NUMBER,
             chain_id: CHAIN_ID,

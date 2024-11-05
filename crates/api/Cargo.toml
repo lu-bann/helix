@@ -40,6 +40,10 @@ redis.workspace = true
 # Ethereum Types
 reth-primitives.workspace = true
 ethereum-consensus.workspace = true
+alloy-sol-types.workspace = true
+alloy-contract.workspace = true
+alloy-provider.workspace = true
+alloy-transport.workspace = true
 
 # Testing and Mocking
 serial_test.workspace = true

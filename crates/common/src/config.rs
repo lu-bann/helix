@@ -7,6 +7,7 @@ use helix_utils::{
     serde::{default_bool, deserialize_url, serialize_url},
 };
 use reqwest::Url;
+use reth_primitives::Address;
 use serde::{Deserialize, Serialize};
 
 use crate::{api::*, ValidatorPreferences};
@@ -20,6 +21,10 @@ pub struct RelayConfig {
     pub simulator: SimulatorConfig,
     #[serde(default)]
     pub beacon_clients: Vec<BeaconClientConfig>,
+    #[serde(default)]
+    pub execution_clients: ExecutionClientConfig,
+    #[serde(default)]
+    pub onchain_delegation: OnchainDelegationConfig,
     #[serde(default)]
     pub relays: Vec<RelayGossipConfig>,
     #[serde(default)]
@@ -95,6 +100,23 @@ pub struct BeaconClientConfig {
     pub gossip_blobs_enabled: bool,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ExecutionClientConfig {
+    #[serde(serialize_with = "serialize_url", deserialize_with = "deserialize_url")]
+    pub url: Url,
+}
+
+impl Default for ExecutionClientConfig {
+    fn default() -> Self {
+        Self { url: Url::parse("http://localhost:8545").unwrap() }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct OnchainDelegationConfig {
+    pub delegation_contract_address: Address,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct RelayGossipConfig {
     pub url: String,
@@ -156,7 +178,7 @@ impl RouterConfig {
             Route::SubmitHeader,
             Route::GetTopBid,
             Route::SetConstraints,
-            Route::ElectPreconfer,
+            // Route::ElectPreconfer,
         ]);
 
         self.replace_condensed_with_real(Route::ProposerApi, &[
@@ -165,7 +187,7 @@ impl RouterConfig {
             Route::GetHeader,
             Route::GetPayload,
             Route::SetConstraints,
-            Route::ElectPreconfer,
+            // Route::ElectPreconfer,
         ]);
 
         self.replace_condensed_with_real(Route::DataApi, &[
@@ -236,7 +258,7 @@ pub enum Route {
     ValidatorRegistration,
     GetConstraints,
     SetConstraints,
-    ElectPreconfer,
+    // ElectPreconfer,
     GetPreconfer,
     GetPreconfersForEpoch,
 }
@@ -255,8 +277,7 @@ impl Route {
             Route::GetHeader => format!("{PATH_PROPOSER_API}{PATH_GET_HEADER}"),
             Route::GetPayload => format!("{PATH_PROPOSER_API}{PATH_GET_PAYLOAD}"),
             Route::SetConstraints => format!("{PATH_PROPOSER_API}{PATH_SET_CONSTRAINTS}"),
-            Route::ElectPreconfer => format!("{PATH_PROPOSER_API}{PATH_ELECT_PRECONFER}"),
-
+            // Route::ElectPreconfer => format!("{PATH_PROPOSER_API}{PATH_ELECT_PRECONFER}"),
             Route::ProposerPayloadDelivered => format!("{PATH_DATA_API}{PATH_PROPOSER_PAYLOAD_DELIVERED}"),
             Route::BuilderBidsReceived => format!("{PATH_DATA_API}{PATH_BUILDER_BIDS_RECEIVED}"),
             Route::ValidatorRegistration => format!("{PATH_DATA_API}{PATH_VALIDATOR_REGISTRATION}"),

@@ -45,6 +45,8 @@ impl SignedPreconferElection {
 pub struct PreconferElection {
     /// Public key of the preconfer proposing for `slot`.
     pub preconfer_pubkey: BlsPublicKey,
+    /// Proposer public key.
+    pub proposer_pubkey: BlsPublicKey,
     /// Slot this delegation is valid for.
     pub slot_number: u64,
     /// Chain ID of the chain this election is for.
@@ -57,6 +59,7 @@ impl PreconferElection {
     pub fn from_proposer_duty(duty: &BuilderGetValidatorsResponseEntry, chain_id: u64) -> Self {
         Self {
             slot_number: duty.slot,
+            proposer_pubkey: duty.entry.registration.message.public_key.clone(),
             preconfer_pubkey: duty.entry.registration.message.public_key.clone(),
             chain_id,
             gas_limit: duty.entry.registration.message.gas_limit,

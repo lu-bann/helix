@@ -1,5 +1,6 @@
 use std::{env, net::SocketAddr, sync::Arc, time::Duration};
 
+use alloy_provider::ProviderBuilder;
 use ethereum_consensus::crypto::SecretKey;
 use helix_beacon_client::{
     beacon_client::BeaconClient, fiber_broadcaster::FiberBroadcaster, multi_beacon_client::MultiBeaconClient, BlockBroadcaster,
@@ -18,6 +19,7 @@ use tracing::{error, info};
 
 use crate::{
     builder::optimistic_simulator::OptimisticSimulator,
+    delegation::ContractDelegation,
     gossiper::grpc_gossiper::GrpcGossiperClientManager,
     relay_data::{BidsCache, DeliveredPayloadsCache},
     router::{build_router, BuilderApiProd, ConstraintsApiProd, DataApiProd, ProposerApiProd},
@@ -140,6 +142,13 @@ impl ApiService {
 
         let validator_preferences = Arc::new(config.validator_preferences.clone());
 
+        let provider = ProviderBuilder::new()
+            .with_recommended_fillers()
+            .on_builtin(config.execution_clients.url.clone().as_str())
+            .await
+            .expect("execution client provider init failed");
+        let delegation_contract = Arc::new(ContractDelegation::new(config.onchain_delegation.delegation_contract_address, provider));
+
         let proposer_api = Arc::new(ProposerApiProd::new(
             auctioneer.clone(),
             db.clone(),
@@ -151,6 +160,7 @@ impl ApiService {
             validator_preferences.clone(),
             config.target_get_payload_propagation_duration_ms,
             proposer_gossip_receiver,
+            delegation_contract,
         ));
 
         let data_api = Arc::new(DataApiProd::new(validator_preferences.clone(), db.clone()));

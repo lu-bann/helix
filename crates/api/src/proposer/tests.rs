@@ -70,6 +70,7 @@ mod proposer_api_tests {
     };
 
     use crate::{
+        delegation::mock_delegation::MockDelegation,
         gossiper::{mock_gossiper::MockGossiper, types::GossipedMessage},
         proposer::{
             api::{get_nanos_timestamp, ProposerApi},
@@ -204,7 +205,7 @@ mod proposer_api_tests {
     async fn start_api_server() -> (
         oneshot::Sender<()>,
         HttpServiceConfig,
-        Arc<ProposerApi<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper>>,
+        Arc<ProposerApi<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper, MockDelegation>>,
         Receiver<Sender<ChainUpdate>>,
         Arc<MockAuctioneer>,
     ) {
@@ -825,7 +826,7 @@ mod proposer_api_tests {
         let (_gossip_sender, gossip_receiver) = channel::<GossipedMessage>(32);
         let auctioneer = Arc::new(MockAuctioneer::default());
 
-        let prop_api = ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper>::new(
+        let prop_api = ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper, MockDelegation>::new(
             auctioneer.clone(),
             Arc::new(MockDatabaseService::default()),
             Arc::new(MockGossiper::new().unwrap()),
@@ -836,6 +837,7 @@ mod proposer_api_tests {
             Arc::new(ValidatorPreferences::default()),
             0,
             gossip_receiver,
+            Arc::new(MockDelegation::default()),
         );
 
         let mut x = gen_signed_vr();

@@ -20,6 +20,7 @@ use crate::{
         optimistic_simulator::OptimisticSimulator,
     },
     constraints::api::ConstraintsApi,
+    delegation::ContractDelegation,
     gossiper::grpc_gossiper::GrpcGossiperClientManager,
     middleware::rate_limiting::rate_limit_by_ip::{rate_limit_by_ip, RateLimitState, RateLimitStateForRoute},
     proposer::api::ProposerApi,
@@ -30,7 +31,8 @@ use crate::{
 pub type BuilderApiProd =
     BuilderApi<RedisCache, PostgresDatabaseService, OptimisticSimulator<RedisCache, PostgresDatabaseService>, GrpcGossiperClientManager>;
 
-pub type ProposerApiProd = ProposerApi<RedisCache, PostgresDatabaseService, MultiBeaconClient<BeaconClient>, GrpcGossiperClientManager>;
+pub type ProposerApiProd =
+    ProposerApi<RedisCache, PostgresDatabaseService, MultiBeaconClient<BeaconClient>, GrpcGossiperClientManager, ContractDelegation>;
 
 pub type DataApiProd = DataApi<PostgresDatabaseService>;
 
@@ -91,9 +93,9 @@ pub fn build_router(
             Route::SetConstraints => {
                 router = router.route(&route.path(), post(ProposerApiProd::set_constraints));
             }
-            Route::ElectPreconfer => {
-                router = router.route(&route.path(), post(ProposerApiProd::elect_preconfer));
-            }
+            // Route::ElectPreconfer => {
+            //     router = router.route(&route.path(), post(ProposerApiProd::elect_preconfer));
+            // }
             Route::ProposerPayloadDelivered => {
                 router = router.route(&route.path(), get(DataApiProd::proposer_payload_delivered));
             }

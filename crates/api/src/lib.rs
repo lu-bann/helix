@@ -2,6 +2,7 @@
 
 pub mod builder;
 pub mod constraints;
+pub mod delegation;
 pub mod gossiper;
 pub mod integration_tests;
 pub mod middleware;

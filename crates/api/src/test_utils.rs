@@ -21,6 +21,7 @@ use crate::{
         mock_simulator::MockSimulator,
     },
     constraints::{api::ConstraintsApi, types::*},
+    delegation::MockDelegation,
     gossiper::{mock_gossiper::MockGossiper, types::GossipedMessage},
     proposer::{
         api::{ProposerApi, MAX_BLINDED_BLOCK_LENGTH, MAX_VAL_REGISTRATIONS_LENGTH},
@@ -33,7 +34,7 @@ pub fn app() -> Router {
     let (slot_update_sender, _slot_update_receiver) = channel::<Sender<ChainUpdate>>(32);
     let (_gossip_sender, gossip_receiver) = channel::<GossipedMessage>(32);
 
-    let api_service = Arc::new(ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper>::new(
+    let api_service = Arc::new(ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper, MockDelegation>::new(
         Arc::new(MockAuctioneer::default()),
         Arc::new(MockDatabaseService::default()),
         Arc::new(MockGossiper::new().unwrap()),
@@ -44,6 +45,7 @@ pub fn app() -> Router {
         Arc::new(ValidatorPreferences::default()),
         0,
         gossip_receiver,
+        Arc::new(MockDelegation::default()),
     ));
 
     let data_api = Arc::new(DataApi::<MockDatabaseService>::new(Arc::new(ValidatorPreferences::default()), Arc::new(MockDatabaseService::default())));
@@ -51,19 +53,19 @@ pub fn app() -> Router {
     Router::new()
         .route(
             &format!("{PATH_PROPOSER_API}{PATH_STATUS}"),
-            get(ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper>::status),
+            get(ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper, MockDelegation>::status),
         )
         .route(
             &format!("{PATH_PROPOSER_API}{PATH_REGISTER_VALIDATORS}"),
-            post(ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper>::register_validators),
+            post(ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper, MockDelegation>::register_validators),
         )
         .route(
             &format!("{PATH_PROPOSER_API}{PATH_GET_HEADER}"),
-            get(ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper>::get_header),
+            get(ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper, MockDelegation>::get_header),
         )
         .route(
             &format!("{PATH_PROPOSER_API}{PATH_GET_PAYLOAD}"),
-            post(ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper>::get_payload),
+            post(ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper, MockDelegation>::get_payload),
         )
         .route(&format!("{PATH_DATA_API}{PATH_PROPOSER_PAYLOAD_DELIVERED}"), get(DataApi::<MockDatabaseService>::proposer_payload_delivered))
         .route(&format!("{PATH_DATA_API}{PATH_BUILDER_BIDS_RECEIVED}"), get(DataApi::<MockDatabaseService>::builder_bids_received))
@@ -112,39 +114,41 @@ pub fn builder_api_app() -> (Router, Arc<BuilderApi<MockAuctioneer, MockDatabase
 
 pub fn proposer_api_app() -> (
     Router,
-    Arc<ProposerApi<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper>>,
+    Arc<ProposerApi<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper, MockDelegation>>,
     Receiver<Sender<ChainUpdate>>,
     Arc<MockAuctioneer>,
 ) {
     let (slot_update_sender, slot_update_receiver) = channel::<Sender<ChainUpdate>>(32);
     let (_gossip_sender, gossip_receiver) = channel::<GossipedMessage>(32);
     let auctioneer = Arc::new(MockAuctioneer::default());
-    let proposer_api_service = Arc::new(ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper>::new(
-        auctioneer.clone(),
-        Arc::new(MockDatabaseService::default()),
-        Arc::new(MockGossiper::new().unwrap()),
-        vec![Arc::new(BlockBroadcaster::Mock(MockBlockBroadcaster::default()))],
-        Arc::new(MockMultiBeaconClient::default()),
-        Arc::new(ChainInfo::for_mainnet()),
-        slot_update_sender.clone(),
-        Arc::new(ValidatorPreferences::default()),
-        0,
-        gossip_receiver,
-    ));
+    let proposer_api_service =
+        Arc::new(ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper, MockDelegation>::new(
+            auctioneer.clone(),
+            Arc::new(MockDatabaseService::default()),
+            Arc::new(MockGossiper::new().unwrap()),
+            vec![Arc::new(BlockBroadcaster::Mock(MockBlockBroadcaster::default()))],
+            Arc::new(MockMultiBeaconClient::default()),
+            Arc::new(ChainInfo::for_mainnet()),
+            slot_update_sender.clone(),
+            Arc::new(ValidatorPreferences::default()),
+            0,
+            gossip_receiver,
+            Arc::new(MockDelegation::default()),
+        ));
 
     let router = Router::new()
         .route(
             &format!("{PATH_PROPOSER_API}{PATH_GET_HEADER}"),
-            get(ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper>::get_header),
+            get(ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper, MockDelegation>::get_header),
         )
         .route(
             &format!("{PATH_PROPOSER_API}{PATH_GET_PAYLOAD}"),
-            post(ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper>::get_payload),
+            post(ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper, MockDelegation>::get_payload),
         )
         .layer(RequestBodyLimitLayer::new(MAX_BLINDED_BLOCK_LENGTH))
         .route(
             &format!("{PATH_PROPOSER_API}{PATH_REGISTER_VALIDATORS}"),
-            post(ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper>::register_validators),
+            post(ProposerApi::<MockAuctioneer, MockDatabaseService, MockMultiBeaconClient, MockGossiper, MockDelegation>::register_validators),
         )
         .layer(RequestBodyLimitLayer::new(MAX_VAL_REGISTRATIONS_LENGTH))
         .layer(Extension(proposer_api_service.clone()));

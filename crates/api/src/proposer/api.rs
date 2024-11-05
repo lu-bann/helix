@@ -1,3 +1,4 @@
+#![allow(clippy::type_complexity)]
 use std::{
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -31,7 +32,7 @@ use helix_common::{
     deneb::{BlobSidecars, BuildBlobSidecarError},
     get_genesis_time_with_delay,
     signed_proposal::VersionedSignedProposal,
-    traces::constraints_api::{ElectGatewayTrace, SetConstraintsTrace},
+    traces::constraints_api::SetConstraintsTrace,
     try_execution_header_from_payload,
     versioned_payload::PayloadAndBlobs,
     BidRequest, Filtering, GetHeaderTrace, GetPayloadTrace, RegisterValidatorsTrace, ValidatorPreferences,
@@ -39,7 +40,7 @@ use helix_common::{
 use helix_database::DatabaseService;
 use helix_datastore::{constraints::ConstraintsAuctioneer, error::AuctioneerError, Auctioneer};
 use helix_housekeeper::{ChainUpdate, SlotUpdate};
-use helix_utils::signing::{verify_signed_builder_message, verify_signed_commit_boost_message, verify_signed_consensus_message};
+use helix_utils::signing::{verify_signed_builder_message, verify_signed_consensus_message};
 use tokio::{
     sync::{
         mpsc::{self, error::SendError, Receiver, Sender},
@@ -51,10 +52,8 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 use crate::{
-    constraints::{
-        api::{MAX_GATEWAY_ELECTION_SIZE, MAX_SET_CONSTRAINTS_SIZE},
-        SET_CONSTRAINTS_CUTOFF_NS,
-    },
+    constraints::{api::MAX_SET_CONSTRAINTS_SIZE, SET_CONSTRAINTS_CUTOFF_NS},
+    delegation::traits::DelegationTrait,
     gossiper::{
         traits::GossipClientTrait,
         types::{BroadcastGetPayloadParams, GossipedMessage},
@@ -73,12 +72,13 @@ struct SlotInfo {
 }
 
 #[derive(Clone)]
-pub struct ProposerApi<A, DB, M, G>
+pub struct ProposerApi<A, DB, M, G, D>
 where
     A: Auctioneer + ConstraintsAuctioneer,
     DB: DatabaseService,
     M: MultiBeaconClientTrait,
     G: GossipClientTrait + 'static,
+    D: DelegationTrait,
 {
     auctioneer: Arc<A>,
     db: Arc<DB>,
@@ -94,14 +94,17 @@ where
     validator_preferences: Arc<ValidatorPreferences>,
 
     target_get_payload_propagation_duration_ms: u64,
+
+    delegation_contract: Arc<D>,
 }
 
-impl<A, DB, M, G> ProposerApi<A, DB, M, G>
+impl<A, DB, M, G, D> ProposerApi<A, DB, M, G, D>
 where
     A: Auctioneer + ConstraintsAuctioneer + 'static,
     DB: DatabaseService + 'static,
     M: MultiBeaconClientTrait + 'static,
     G: GossipClientTrait + 'static,
+    D: DelegationTrait + 'static,
 {
     pub fn new(
         auctioneer: Arc<A>,
@@ -114,6 +117,7 @@ where
         validator_preferences: Arc<ValidatorPreferences>,
         target_get_payload_propagation_duration_ms: u64,
         gossip_receiver: Receiver<GossipedMessage>,
+        delegation_contract: Arc<D>,
     ) -> Self {
         let api = Self {
             auctioneer,
@@ -126,6 +130,7 @@ where
             chain_info,
             validator_preferences,
             target_get_payload_propagation_duration_ms,
+            delegation_contract,
         };
 
         // Spin up gossip processing task
@@ -149,7 +154,7 @@ where
     }
 
     /// Implements this API: <https://ethereum.github.io/builder-specs/#/Builder/status>
-    pub async fn status(Extension(_proposer_api): Extension<Arc<ProposerApi<A, DB, M, G>>>) -> Result<impl IntoResponse, ProposerApiError> {
+    pub async fn status(Extension(_proposer_api): Extension<Arc<ProposerApi<A, DB, M, G, D>>>) -> Result<impl IntoResponse, ProposerApiError> {
         Ok(StatusCode::OK)
     }
 
@@ -166,7 +171,7 @@ where
     ///
     /// Implements this API: <https://ethereum.github.io/builder-specs/#/Builder/registerValidator>
     pub async fn register_validators(
-        Extension(proposer_api): Extension<Arc<ProposerApi<A, DB, M, G>>>,
+        Extension(proposer_api): Extension<Arc<ProposerApi<A, DB, M, G, D>>>,
         headers: HeaderMap,
         req: Request<Body>,
     ) -> Result<StatusCode, ProposerApiError> {
@@ -367,7 +372,7 @@ where
     ///
     /// Implements this API: <https://ethereum.github.io/builder-specs/#/Builder/getHeader>
     pub async fn get_header(
-        Extension(proposer_api): Extension<Arc<ProposerApi<A, DB, M, G>>>,
+        Extension(proposer_api): Extension<Arc<ProposerApi<A, DB, M, G, D>>>,
         Path(GetHeaderParams { slot, parent_hash, public_key }): Path<GetHeaderParams>,
     ) -> Result<impl IntoResponse, ProposerApiError> {
         let request_id = Uuid::new_v4();
@@ -448,7 +453,7 @@ where
     ///
     /// Implements this API: <https://ethereum.github.io/builder-specs/#/Builder/submitBlindedBlock>
     pub async fn get_payload(
-        Extension(proposer_api): Extension<Arc<ProposerApi<A, DB, M, G>>>,
+        Extension(proposer_api): Extension<Arc<ProposerApi<A, DB, M, G, D>>>,
         req: Request<Body>,
     ) -> Result<impl IntoResponse, ProposerApiError> {
         let mut trace = GetPayloadTrace { receive: get_nanos_timestamp()?, ..Default::default() };
@@ -727,7 +732,7 @@ where
     /// If the request is sent by the preconfer for this current slot and this is the first time, we save the constraints.
     /// Must also be sent before the cutoff.
     pub async fn set_constraints(
-        Extension(proposer_api): Extension<Arc<ProposerApi<A, DB, M, G>>>,
+        Extension(proposer_api): Extension<Arc<ProposerApi<A, DB, M, G, D>>>,
         req: Request<Body>,
     ) -> Result<StatusCode, ProposerApiError> {
         let request_id = Uuid::new_v4();
@@ -785,45 +790,45 @@ where
         Ok(StatusCode::OK)
     }
 
-    /// Elects a gateway to perform pre-confirmations for a validator. The request must be signed by the validator
-    /// and must be for the next epoch.
-    pub async fn elect_preconfer(
-        Extension(proposer_api): Extension<Arc<ProposerApi<A, DB, M, G>>>,
-        req: Request<Body>,
-    ) -> Result<StatusCode, ProposerApiError> {
-        let request_id = Uuid::new_v4();
-        let mut trace = ElectGatewayTrace { receive: get_nanos_timestamp()?, ..Default::default() };
+    // /// Elects a gateway to perform pre-confirmations for a validator. The request must be signed by the validator
+    // /// and must be for the next epoch.
+    // pub async fn elect_preconfer(
+    //     Extension(proposer_api): Extension<Arc<ProposerApi<A, DB, M, G>>>,
+    //     req: Request<Body>,
+    // ) -> Result<StatusCode, ProposerApiError> {
+    //     let request_id = Uuid::new_v4();
+    //     let mut trace = ElectGatewayTrace { receive: get_nanos_timestamp()?, ..Default::default() };
 
-        // Deserialise request
-        let mut election_req: SignedPreconferElection = deserialize_json_request_bytes(req, MAX_GATEWAY_ELECTION_SIZE).await?;
-        trace.deserialize = get_nanos_timestamp()?;
+    //     // Deserialise request
+    //     let mut election_req: SignedPreconferElection = deserialize_json_request_bytes(req, MAX_GATEWAY_ELECTION_SIZE).await?;
+    //     trace.deserialize = get_nanos_timestamp()?;
 
-        let slot_info = proposer_api.curr_slot_info.read().await;
-        info!(
-            request_id = %request_id,
-            event = "elect_gateway",
-            head_slot = slot_info.slot,
-            request_ts = trace.receive,
-            slot = %election_req.slot(),
-            preconfer_public_key = ?election_req.preconfer_public_key(),
-            gas_limit = election_req.gas_limit(),
-            chain_id = election_req.chain_id(),
-        );
+    //     let slot_info = proposer_api.curr_slot_info.read().await;
+    //     info!(
+    //         request_id = %request_id,
+    //         event = "elect_gateway",
+    //         head_slot = slot_info.slot,
+    //         request_ts = trace.receive,
+    //         slot = %election_req.slot(),
+    //         preconfer_public_key = ?election_req.preconfer_public_key(),
+    //         gas_limit = election_req.gas_limit(),
+    //         chain_id = election_req.chain_id(),
+    //     );
 
-        if let Err(err) = proposer_api.validate_election_request(&mut election_req, slot_info.slot).await {
-            warn!(request_id = %request_id, ?err, "validation failed");
-            return Err(err);
-        }
-        trace.validation_complete = get_nanos_timestamp()?;
+    //     if let Err(err) = proposer_api.validate_election_request(&mut election_req, slot_info.slot).await {
+    //         warn!(request_id = %request_id, ?err, "validation failed");
+    //         return Err(err);
+    //     }
+    //     trace.validation_complete = get_nanos_timestamp()?;
 
-        // Save to constraints datastore
-        // TODO: database
-        proposer_api.auctioneer.save_new_gateway_election(&election_req, election_req.slot()).await?;
-        trace.gateway_election_saved = get_nanos_timestamp()?;
+    //     // Save to constraints datastore
+    //     // TODO: database
+    //     proposer_api.auctioneer.save_new_gateway_election(&election_req, election_req.slot()).await?;
+    //     trace.gateway_election_saved = get_nanos_timestamp()?;
 
-        info!(%request_id, ?trace, "gateway elected");
-        Ok(StatusCode::OK)
-    }
+    //     info!(%request_id, ?trace, "gateway elected");
+    //     Ok(StatusCode::OK)
+    // }
 
     /// - Ensures the constraints can only be set for the current epoch.
     /// - Checks that the constraints are set within the allowed time window.
@@ -868,61 +873,16 @@ where
 
         Ok(())
     }
-
-    /// - Checks if the requested slot is in the past.
-    /// - Checks if the requested slot is for epoch+1.
-    /// - Retrieves the latest known proposer duty.
-    /// - Ensures the request slot is not beyond the latest known proposer duty.
-    /// - Validates that the provided public key is the proposer for the requested slot.
-    /// - Verifies the signature.
-    async fn validate_election_request(&self, election_req: &mut SignedPreconferElection, head_slot: u64) -> Result<(), ProposerApiError> {
-        // Cannot elect a gateway for a past slot
-        if election_req.slot() <= head_slot {
-            return Err(ProposerApiError::RequestForPastSlot { request_slot: election_req.slot(), head_slot });
-        }
-
-        // Ensure the requested slot is for the next epoch
-        let head_epoch = head_slot / SLOTS_PER_EPOCH;
-        let request_epoch = election_req.slot() / SLOTS_PER_EPOCH;
-        if request_epoch != head_epoch + 1 {
-            return Err(ProposerApiError::ElectPreconferRequestForInvalidEpoch { request_epoch, head_epoch });
-        }
-
-        let duties_read_guard = self.proposer_duties.read().await;
-
-        // Ensure provided validator public key is the proposer for the requested slot.
-        let proposer_pub_key = match duties_read_guard.iter().find(|duty| duty.slot == election_req.slot()) {
-            Some(slot_duty) => slot_duty.entry.registration.message.public_key.clone(),
-            None => {
-                return Err(ProposerApiError::ProposerDutyNotFound { slot: election_req.slot() });
-            }
-        };
-
-        // Drop the read lock guard to avoid holding it during signature verification
-        drop(duties_read_guard);
-
-        // Verify commit boost signature
-        if let Err(err) = verify_signed_commit_boost_message(
-            &mut election_req.message,
-            &election_req.signature,
-            &proposer_pub_key,
-            Some(self.chain_info.genesis_validators_root),
-            &self.chain_info.context,
-        ) {
-            return Err(ProposerApiError::InvalidSignature(err));
-        }
-
-        Ok(())
-    }
 }
 
 // HELPERS
-impl<A, DB, M, G> ProposerApi<A, DB, M, G>
+impl<A, DB, M, G, D> ProposerApi<A, DB, M, G, D>
 where
     A: Auctioneer + ConstraintsAuctioneer + 'static,
     DB: DatabaseService + 'static,
     M: MultiBeaconClientTrait + 'static,
     G: GossipClientTrait + 'static,
+    D: DelegationTrait + 'static,
 {
     /// Validate a single registration.
     pub fn validate_registration(&self, registration: &mut SignedValidatorRegistration) -> Result<(), ProposerApiError> {
@@ -1274,12 +1234,13 @@ async fn deserialize_get_payload_bytes(req: Request<Body>) -> Result<SignedBlind
 }
 
 // STATE SYNC
-impl<A, DB, M, G> ProposerApi<A, DB, M, G>
+impl<A, DB, M, G, D> ProposerApi<A, DB, M, G, D>
 where
     A: Auctioneer + ConstraintsAuctioneer,
     DB: DatabaseService,
     M: MultiBeaconClientTrait,
     G: GossipClientTrait + 'static,
+    D: DelegationTrait + 'static,
 {
     /// Subscribes to slot head updater.
     /// Updates the current slot and next proposer duty.
@@ -1313,6 +1274,29 @@ where
 
         // Update duties if applicable
         if let Some(new_duties) = slot_update.new_duties {
+            for duty in new_duties.iter() {
+                match self.delegation_contract.get_preconfer_election(&duty.entry.registration.message.public_key, duty.slot).await {
+                    Ok(Some(elected_preconfer)) => match self.auctioneer.save_new_gateway_election(&elected_preconfer, duty.slot).await {
+                        Ok(_) => {
+                            debug!(
+                                slot = duty.slot,
+                                pub_key = duty.entry.registration.message.public_key.to_string(),
+                                preconfer = elected_preconfer.message.preconfer_pubkey.to_string(),
+                                "elected preconfer"
+                            );
+                        }
+                        Err(err) => {
+                            error!(slot = duty.slot, pub_key = duty.entry.registration.message.public_key.to_string(), error = %err, "error saving new gateway election");
+                        }
+                    },
+                    Ok(None) => {
+                        debug!(slot = duty.slot, pub_key = duty.entry.registration.message.public_key.to_string(), "no elected preconfer");
+                    }
+                    Err(err) => {
+                        error!(slot = duty.slot, pub_key = duty.entry.registration.message.public_key.to_string(), error = %err, "error getting preconfer election");
+                    }
+                }
+            }
             *self.proposer_duties.write().await = new_duties;
         }
 
