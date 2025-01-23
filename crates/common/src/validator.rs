@@ -1,10 +1,9 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use ethereum_consensus::{
     phase0::Validator,
     primitives::{BlsPublicKey, Gwei, ValidatorIndex},
     serde::as_str,
 };
+use helix_utils::utcnow_ms;
 use serde::{Deserialize, Serialize};
 
 use crate::api::proposer_api::ValidatorRegistrationInfo;
@@ -42,15 +41,16 @@ pub struct SignedValidatorRegistrationEntry {
     pub registration_info: ValidatorRegistrationInfo,
     pub inserted_at: u64,
     pub pool_name: Option<String>,
+    pub user_agent: Option<String>,
 }
 
 impl SignedValidatorRegistrationEntry {
-    pub fn new(registration_info: ValidatorRegistrationInfo, pool_name: Option<String>) -> Self {
-        Self {
-            registration_info,
-            inserted_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
-            pool_name,
-        }
+    pub fn new(
+        registration_info: ValidatorRegistrationInfo,
+        pool_name: Option<String>,
+        user_agent: Option<String>,
+    ) -> Self {
+        Self { registration_info, inserted_at: utcnow_ms(), pool_name, user_agent }
     }
 
     pub fn public_key(&self) -> &BlsPublicKey {

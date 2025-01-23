@@ -50,6 +50,7 @@ impl DatabaseService for MockDatabaseService {
         &self,
         _entry: ValidatorRegistrationInfo,
         _pool_name: Option<String>,
+        _user_agent: Option<String>,
     ) -> Result<(), DatabaseError> {
         Ok(())
     }
@@ -57,6 +58,7 @@ impl DatabaseService for MockDatabaseService {
         &self,
         _entries: Vec<ValidatorRegistrationInfo>,
         _pool_name: Option<String>,
+        _user_agent: Option<String>,
     ) -> Result<(), DatabaseError> {
         Ok(())
     }
@@ -140,6 +142,7 @@ impl DatabaseService for MockDatabaseService {
         _bid_trace: &BidTrace,
         _payload: Arc<PayloadAndBlobs>,
         _latency_trace: &GetPayloadTrace,
+        _user_agent: Option<String>,
     ) -> Result<(), DatabaseError> {
         Ok(())
     }
@@ -147,7 +150,7 @@ impl DatabaseService for MockDatabaseService {
     async fn store_block_submission(
         &self,
         _submission: Arc<SignedBidSubmission>,
-        _trace: Arc<SubmissionTrace>,
+        _trace: SubmissionTrace,
         _optimistic_version: i16,
     ) -> Result<(), DatabaseError> {
         Ok(())
@@ -207,6 +210,7 @@ impl DatabaseService for MockDatabaseService {
     async fn get_bids(
         &self,
         _filters: &BidFilters,
+        _validator_preferences: Arc<ValidatorPreferences>,
     ) -> Result<Vec<BidSubmissionDocument>, DatabaseError> {
         let mut bid = BidSubmissionDocument::default();
         bid.bid_trace.value = U256::from(1000);
@@ -248,7 +252,7 @@ impl DatabaseService for MockDatabaseService {
     async fn store_header_submission(
         &self,
         _submission: Arc<SignedHeaderSubmission>,
-        _trace: Arc<HeaderSubmissionTrace>,
+        _trace: HeaderSubmissionTrace,
     ) -> Result<(), DatabaseError> {
         Ok(())
     }
@@ -256,7 +260,7 @@ impl DatabaseService for MockDatabaseService {
     async fn save_gossiped_header_trace(
         &self,
         _block_hash: ByteVector<32>,
-        _trace: Arc<GossipedHeaderTrace>,
+        _trace: GossipedHeaderTrace,
     ) -> Result<(), DatabaseError> {
         Ok(())
     }
@@ -264,7 +268,7 @@ impl DatabaseService for MockDatabaseService {
     async fn save_gossiped_payload_trace(
         &self,
         _block_hash: ByteVector<32>,
-        _trace: Arc<GossipedPayloadTrace>,
+        _trace: GossipedPayloadTrace,
     ) -> Result<(), DatabaseError> {
         Ok(())
     }

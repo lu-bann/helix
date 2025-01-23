@@ -34,12 +34,14 @@ pub trait DatabaseService: Send + Sync + Clone {
         &self,
         entry: ValidatorRegistrationInfo,
         pool_name: Option<String>,
+        user_agent: Option<String>,
     ) -> Result<(), DatabaseError>;
 
     async fn save_validator_registrations(
         &self,
         entries: Vec<ValidatorRegistrationInfo>,
         pool_name: Option<String>,
+        user_agent: Option<String>,
     ) -> Result<(), DatabaseError>;
 
     async fn is_registration_update_required(
@@ -97,12 +99,13 @@ pub trait DatabaseService: Send + Sync + Clone {
         bid_trace: &BidTrace,
         payload: Arc<PayloadAndBlobs>,
         latency_trace: &GetPayloadTrace,
+        user_agent: Option<String>,
     ) -> Result<(), DatabaseError>;
 
     async fn store_block_submission(
         &self,
         submission: Arc<SignedBidSubmission>,
-        trace: Arc<SubmissionTrace>,
+        trace: SubmissionTrace,
         optimistic_version: i16,
     ) -> Result<(), DatabaseError>;
 
@@ -142,6 +145,7 @@ pub trait DatabaseService: Send + Sync + Clone {
     async fn get_bids(
         &self,
         filters: &BidFilters,
+        validator_preferences: Arc<ValidatorPreferences>,
     ) -> Result<Vec<BidSubmissionDocument>, DatabaseError>;
 
     async fn get_delivered_payloads(
@@ -171,19 +175,19 @@ pub trait DatabaseService: Send + Sync + Clone {
     async fn store_header_submission(
         &self,
         submission: Arc<SignedHeaderSubmission>,
-        trace: Arc<HeaderSubmissionTrace>,
+        trace: HeaderSubmissionTrace,
     ) -> Result<(), DatabaseError>;
 
     async fn save_gossiped_header_trace(
         &self,
         block_hash: ByteVector<32>,
-        trace: Arc<GossipedHeaderTrace>,
+        trace: GossipedHeaderTrace,
     ) -> Result<(), DatabaseError>;
 
     async fn save_gossiped_payload_trace(
         &self,
         block_hash: ByteVector<32>,
-        trace: Arc<GossipedPayloadTrace>,
+        trace: GossipedPayloadTrace,
     ) -> Result<(), DatabaseError>;
 
     async fn get_trusted_proposers(&self) -> Result<Vec<ProposerInfo>, DatabaseError>;

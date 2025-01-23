@@ -3,7 +3,7 @@ use axum::{
     http::{Request, StatusCode},
     Extension,
 };
-use ethereum_consensus::{deneb::Slot, ssz};
+use ethereum_consensus::{phase0::mainnet::SLOTS_PER_EPOCH, ssz};
 use helix_common::{
     api::constraints_api::{
         SignableBLS, SignedDelegation, SignedRevocation, DELEGATION_ACTION,
@@ -14,15 +14,21 @@ use helix_common::{
     proofs::{ConstraintsMessage, SignedConstraints, SignedConstraintsWithProofData},
     ConstraintSubmissionTrace, ConstraintsApiConfig,
 };
-use helix_database::DatabaseService;
 use helix_datastore::Auctioneer;
-use helix_utils::signing::{verify_signed_message, COMMIT_BOOST_DOMAIN};
-use std::{
-    collections::HashSet,
-    sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
+use helix_housekeeper::{ChainUpdate, SlotUpdate};
+use helix_utils::{
+    signing::{verify_signed_message, COMMIT_BOOST_DOMAIN},
+    utcnow_ns,
 };
-use tokio::{sync::broadcast, time::Instant};
+use std::{self, collections::HashSet, sync::Arc};
+use tokio::{
+    sync::{
+        broadcast,
+        mpsc::{self, error::SendError, Sender},
+        RwLock,
+    },
+    time::Instant,
+};
 use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
@@ -34,14 +40,15 @@ use super::error::Conflict;
 pub(crate) const MAX_REQUEST_LENGTH: usize = 1024 * 1024 * 5;
 
 #[derive(Clone)]
-pub struct ConstraintsApi<A, DB>
+pub struct ConstraintsApi<A>
 where
     A: Auctioneer + 'static,
-    DB: DatabaseService + 'static,
 {
     auctioneer: Arc<A>,
-    db: Arc<DB>,
     chain_info: Arc<ChainInfo>,
+    /// Information about the current head slot and next proposer duty
+    curr_slot_info: Arc<RwLock<SlotUpdate>>,
+
     constraints_api_config: Arc<ConstraintsApiConfig>,
 
     constraints_handle: ConstraintsHandle,
@@ -60,31 +67,48 @@ impl ConstraintsHandle {
     }
 }
 
-impl<A, DB> ConstraintsApi<A, DB>
+impl<A> ConstraintsApi<A>
 where
     A: Auctioneer + 'static,
-    DB: DatabaseService + 'static,
 {
     pub fn new(
         auctioneer: Arc<A>,
-        db: Arc<DB>,
         chain_info: Arc<ChainInfo>,
+        slot_update_subscription: Sender<Sender<ChainUpdate>>,
         constraints_handle: ConstraintsHandle,
         constraints_api_config: Arc<ConstraintsApiConfig>,
     ) -> Self {
-        Self { auctioneer, db, chain_info, constraints_handle, constraints_api_config }
+        let api = Self {
+            auctioneer,
+            chain_info,
+            curr_slot_info: Arc::new(RwLock::new(Default::default())),
+            constraints_handle,
+            constraints_api_config,
+        };
+
+        // Spin up the housekeep task
+        let api_clone = api.clone();
+        tokio::spawn(async move {
+            if let Err(err) = api_clone.housekeep(slot_update_subscription).await {
+                error!(
+                    error = %err,
+                    "ConstraintsApi. housekeep task encountered an error",
+                );
+            }
+        });
+
+        api
     }
 
     /// Handles the submission of batch of signed constraints.
     ///
     /// Implements this API: <https://docs.boltprotocol.xyz/technical-docs/api/builder#constraints>
     pub async fn submit_constraints(
-        Extension(api): Extension<Arc<ConstraintsApi<A, DB>>>,
+        Extension(api): Extension<Arc<ConstraintsApi<A>>>,
         req: Request<Body>,
     ) -> Result<StatusCode, ConstraintsApiError> {
         let request_id = Uuid::new_v4();
-        let mut trace =
-            ConstraintSubmissionTrace { receive: get_nanos_timestamp()?, ..Default::default() };
+        let mut trace = ConstraintSubmissionTrace { receive: utcnow_ns(), ..Default::default() };
 
         // Decode the incoming request body into a payload.
         let signed_constraints =
@@ -108,14 +132,18 @@ where
             return Err(ConstraintsApiError::InvalidConstraints)
         }
 
-        // PERF: can we avoid calling the db?
-        let maybe_validator_pubkey = api.db.get_proposer_duties().await?.iter().find_map(|d| {
-            if d.slot == first_constraints.slot {
-                Some(d.entry.registration.message.public_key.clone())
+        let maybe_validator_pubkey =
+            if let Some(duties) = api.curr_slot_info.read().await.new_duties.as_ref() {
+                duties.iter().find_map(|d| {
+                    if d.slot == first_constraints.slot {
+                        Some(d.entry.registration.message.public_key.clone())
+                    } else {
+                        None
+                    }
+                })
             } else {
                 None
-            }
-        });
+            };
 
         let Some(validator_pubkey) = maybe_validator_pubkey else {
             error!(request_id = %request_id, slot = first_constraints.slot, "Missing proposer info");
@@ -170,22 +198,21 @@ where
             // Send to the constraints channel
             api.constraints_handle.send_constraints(constraint.clone());
 
+            // Decode the constraints and generate proof data.
+            let constraints_with_proofs = SignedConstraintsWithProofData::try_from(constraint).inspect_err(|err| {
+                error!(%err, %request_id, "Failed to decode constraints transactions and generate proof data");
+            })?;
+
             // Finally add the constraints to the redis cache
-            if let Err(err) = api
-                .save_constraints_to_auctioneer(
-                    &mut trace,
-                    constraint.message.slot,
-                    constraint,
-                    &request_id,
-                )
-                .await
-            {
-                error!(request_id = %request_id, error = %err, "Failed to save constraints to auctioneer");
-            };
+            api.save_constraints_to_auctioneer(&mut trace, constraints_with_proofs, &request_id)
+                .await.map_err(|err| {
+                    error!(request_id = %request_id, error = %err, "Failed to save constraints to auctioneer");
+                    err
+                })?;
         }
 
         // Log some final info
-        trace.request_finish = get_nanos_timestamp()?;
+        trace.request_finish = utcnow_ns();
         trace!(
             request_id = %request_id,
             trace = ?trace,
@@ -200,12 +227,11 @@ where
     ///
     /// Implements this API: <https://docs.boltprotocol.xyz/technical-docs/api/builder#delegate>
     pub async fn delegate(
-        Extension(api): Extension<Arc<ConstraintsApi<A, DB>>>,
+        Extension(api): Extension<Arc<ConstraintsApi<A>>>,
         req: Request<Body>,
     ) -> Result<StatusCode, ConstraintsApiError> {
         let request_id = Uuid::new_v4();
-        let mut trace =
-            ConstraintSubmissionTrace { receive: get_nanos_timestamp()?, ..Default::default() };
+        let mut trace = ConstraintSubmissionTrace { receive: utcnow_ns(), ..Default::default() };
 
         info!(
             request_id = %request_id,
@@ -235,7 +261,7 @@ where
                 return Err(ConstraintsApiError::InvalidDelegation)
             }
         };
-        trace.decode = get_nanos_timestamp()?;
+        trace.decode = utcnow_ns();
 
         for delegation in &signed_delegations {
             if let Err(e) = verify_signed_message(
@@ -249,7 +275,7 @@ where
                 return Err(ConstraintsApiError::InvalidSignature)
             };
         }
-        trace.verify_signature = get_nanos_timestamp()?;
+        trace.verify_signature = utcnow_ns();
 
         // Store the delegation in the database
         tokio::spawn(async move {
@@ -259,7 +285,7 @@ where
         });
 
         // Log some final info
-        trace.request_finish = get_nanos_timestamp()?;
+        trace.request_finish = utcnow_ns();
         trace!(
             request_id = %request_id,
             trace = ?trace,
@@ -274,12 +300,11 @@ where
     ///
     /// Implements this API: <https://docs.boltprotocol.xyz/technical-docs/api/builder#revoke>
     pub async fn revoke(
-        Extension(api): Extension<Arc<ConstraintsApi<A, DB>>>,
+        Extension(api): Extension<Arc<ConstraintsApi<A>>>,
         req: Request<Body>,
     ) -> Result<StatusCode, ConstraintsApiError> {
         let request_id = Uuid::new_v4();
-        let mut trace =
-            ConstraintSubmissionTrace { receive: get_nanos_timestamp()?, ..Default::default() };
+        let mut trace = ConstraintSubmissionTrace { receive: utcnow_ns(), ..Default::default() };
 
         info!(
             request_id = %request_id,
@@ -309,7 +334,7 @@ where
                 return Err(ConstraintsApiError::InvalidRevocation)
             }
         };
-        trace.decode = get_nanos_timestamp()?;
+        trace.decode = utcnow_ns();
 
         for revocation in &signed_revocations {
             if let Err(e) = verify_signed_message(
@@ -323,7 +348,7 @@ where
                 return Err(ConstraintsApiError::InvalidSignature)
             };
         }
-        trace.verify_signature = get_nanos_timestamp()?;
+        trace.verify_signature = utcnow_ns();
 
         // Store the delegation in the database
         tokio::spawn(async move {
@@ -334,7 +359,7 @@ where
         });
 
         // Log some final info
-        trace.request_finish = get_nanos_timestamp()?;
+        trace.request_finish = utcnow_ns();
         info!(
             request_id = %request_id,
             trace = ?trace,
@@ -347,22 +372,26 @@ where
 }
 
 // Helpers
-impl<A, DB> ConstraintsApi<A, DB>
+impl<A> ConstraintsApi<A>
 where
     A: Auctioneer + 'static,
-    DB: DatabaseService + 'static,
 {
     async fn save_constraints_to_auctioneer(
         &self,
         trace: &mut ConstraintSubmissionTrace,
-        slot: Slot,
-        constraint: SignedConstraints,
+        constraints_with_proofs: SignedConstraintsWithProofData,
         request_id: &Uuid,
     ) -> Result<(), ConstraintsApiError> {
-        let message_with_data = SignedConstraintsWithProofData::try_from(constraint)?;
-        match self.auctioneer.save_constraints(slot, message_with_data).await {
+        match self
+            .auctioneer
+            .save_constraints(
+                constraints_with_proofs.signed_constraints.message.slot,
+                constraints_with_proofs,
+            )
+            .await
+        {
             Ok(()) => {
-                trace.auctioneer_update = get_nanos_timestamp()?;
+                trace.auctioneer_update = utcnow_ns();
                 info!(
                     request_id = %request_id,
                     timestamp_after_auctioneer = Instant::now().elapsed().as_nanos(),
@@ -376,6 +405,45 @@ where
                 Err(ConstraintsApiError::AuctioneerError(err))
             }
         }
+    }
+}
+
+// STATE SYNC
+impl<A> ConstraintsApi<A>
+where
+    A: Auctioneer + 'static,
+{
+    /// Subscribes to slot head updater.
+    /// Updates the current slot and next proposer duty.
+    pub async fn housekeep(
+        &self,
+        slot_update_subscription: Sender<Sender<ChainUpdate>>,
+    ) -> Result<(), SendError<Sender<ChainUpdate>>> {
+        let (tx, mut rx) = mpsc::channel(20);
+        slot_update_subscription.send(tx).await?;
+
+        while let Some(slot_update) = rx.recv().await {
+            if let ChainUpdate::SlotUpdate(slot_update) = slot_update {
+                self.handle_new_slot(slot_update).await;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handle a new slot update.
+    /// Updates the next proposer duty for the new slot.
+    async fn handle_new_slot(&self, slot_update: SlotUpdate) {
+        let epoch = slot_update.slot / self.chain_info.seconds_per_slot;
+        info!(
+            epoch = epoch,
+            slot = slot_update.slot,
+            slot_start_next_epoch = (epoch + 1) * SLOTS_PER_EPOCH,
+            next_proposer_duty = ?slot_update.next_duty,
+            "ConstraintsApi - housekeep: Updated head slot",
+        );
+
+        *self.curr_slot_info.write().await = slot_update
     }
 }
 
@@ -445,7 +513,7 @@ pub async fn decode_constraints_submission(
         serde_json::from_slice(&body_bytes)?
     };
 
-    trace.decode = get_nanos_timestamp()?;
+    trace.decode = utcnow_ns();
     info!(
         request_id = %request_id,
         timestamp_after_decoding = Instant::now().elapsed().as_nanos(),
@@ -454,11 +522,4 @@ pub async fn decode_constraints_submission(
     );
 
     Ok(constraints.to_vec())
-}
-
-fn get_nanos_timestamp() -> Result<u64, ConstraintsApiError> {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .map_err(|_| ConstraintsApiError::InternalError)
 }

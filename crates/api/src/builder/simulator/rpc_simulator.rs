@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use helix_common::BuilderInfo;
+use helix_common::{metrics::SimulatorMetrics, BuilderInfo};
 use reqwest::{
     header::{HeaderMap, HeaderValue, CONTENT_TYPE},
     Client, Response, StatusCode,
@@ -9,7 +9,6 @@ use tokio::sync::mpsc::Sender;
 use tracing::{debug, error};
 
 use helix_common::simulator::BlockSimError;
-use uuid::Uuid;
 
 use crate::builder::{traits::BlockSimulator, BlockSimRequest, DbInfo};
 
@@ -94,19 +93,21 @@ impl BlockSimulator for RpcSimulator {
         _builder_info: &BuilderInfo,
         is_top_bid: bool,
         sim_result_saver_sender: Sender<DbInfo>,
-        request_id: Uuid,
     ) -> Result<bool, BlockSimError> {
+        let timer = SimulatorMetrics::timer();
+
         let block_hash = request.execution_payload.block_hash().clone();
         debug!(
-            request_id = %request_id,
-            block_hash = %block_hash,
+            %block_hash,
             builder_pub_key = %request.message.builder_public_key,
             "RpcSimulator::process_request",
         );
 
         match self.send_rpc_request(request, is_top_bid).await {
             Ok(response) => {
+                timer.stop_and_record();
                 let result = Self::process_rpc_response(response).await;
+                SimulatorMetrics::sim_status(result.is_ok());
 
                 // Send sim result to db processor task
                 let db_info =
@@ -119,7 +120,9 @@ impl BlockSimulator for RpcSimulator {
                 result.map(|_| false)
             }
             Err(err) => {
-                error!(request_id = %request_id, err = ?err, "Error sending RPC request");
+                timer.stop_and_discard();
+                error!(?err, "Error sending RPC request");
+                SimulatorMetrics::sim_status(false);
                 Err(BlockSimError::RpcError(err.to_string()))
             }
         }

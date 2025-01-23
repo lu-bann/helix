@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, SystemTime},
-};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use ethereum_consensus::primitives::BlsPublicKey;
 use ethers::{
@@ -11,6 +7,7 @@ use ethers::{
     providers::{Http, Provider},
     types::U256,
 };
+use helix_utils::utcnow_ms;
 use reth_primitives::{constants::EPOCH_SLOTS, revm_primitives::HashSet};
 use std::convert::TryFrom;
 use tokio::{
@@ -229,7 +226,7 @@ impl<DB: DatabaseService, BeaconClient: MultiBeaconClientTrait, A: Auctioneer>
             });
         }
 
-        debug!(
+        info!(
             head_slot = head_slot,
             head_slot_pos = (head_slot % EPOCH_SLOTS) + 1,
             prev_head_slot = prev_head_slot,
@@ -360,8 +357,7 @@ impl<DB: DatabaseService, BeaconClient: MultiBeaconClientTrait, A: Auctioneer>
     ///
     /// DB entries are also removed if they have been waiting for over 45 seconds.
     async fn demote_builders_with_expired_pending_blocks(&self) -> Result<(), HousekeeperError> {
-        let current_time =
-            SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64;
+        let current_time = utcnow_ms();
 
         let mut demoted_builders = HashSet::new();
 
@@ -557,11 +553,11 @@ impl<DB: DatabaseService, BeaconClient: MultiBeaconClientTrait, A: Auctioneer>
     /// Determine if the trusted proposers should be refreshed for the given slot.
     ///     
     /// This function checks two conditions:
-    /// 1. If the `head_slot` is exactly divisible by `TRUSTED_PROPOSERS_UPDATE_FREQ`,
-    ///   it will return `true` to trigger a trusted proposer update.
-    /// 2. If the distance between the current `head_slot` and the last slot for which
-    ///  the trusted proposers was refreshed (`refreshed_trusted_proposers_slot`) is greater than or
-    /// equal to `TRUSTED_PROPOSERS_UPDATE_FREQ`, it will also return `true`.
+    /// 1. If the `head_slot` is exactly divisible by `TRUSTED_PROPOSERS_UPDATE_FREQ`, it will
+    ///    return `true` to trigger a trusted proposer update.
+    /// 2. If the distance between the current `head_slot` and the last slot for which the trusted
+    ///    proposers was refreshed (`refreshed_trusted_proposers_slot`) is greater than or equal to
+    ///    `TRUSTED_PROPOSERS_UPDATE_FREQ`, it will also return `true`.
     async fn should_update_trusted_proposers(
         self: &SharedHousekeeper<DB, BeaconClient, A>,
         head_slot: u64,

@@ -9,19 +9,29 @@ use helix_beacon_client::{beacon_client::BeaconClient, multi_beacon_client::Mult
 use helix_common::{Route, RouterConfig};
 use helix_database::postgres::postgres_db_service::PostgresDatabaseService;
 use helix_datastore::redis::redis_cache::RedisCache;
+use helix_utils::extract_request_id;
+use hyper::HeaderMap;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tower::{timeout::TimeoutLayer, BoxError, ServiceBuilder};
-use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::{
+    limit::RequestBodyLimitLayer,
+    request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer},
+};
+use tracing::warn;
 
 use crate::{
     builder::{
         api::{BuilderApi, MAX_PAYLOAD_LENGTH},
+        multi_simulator::MultiSimulator,
         optimistic_simulator::OptimisticSimulator,
     },
     constraints::api::ConstraintsApi,
     gossiper::grpc_gossiper::GrpcGossiperClientManager,
-    middleware::rate_limiting::rate_limit_by_ip::{
-        rate_limit_by_ip, RateLimitState, RateLimitStateForRoute,
+    middleware::{
+        metrics_middleware,
+        rate_limiting::rate_limit_by_ip::{
+            rate_limit_by_ip, RateLimitState, RateLimitStateForRoute,
+        },
     },
     proposer::api::ProposerApi,
     relay_data::{
@@ -33,7 +43,7 @@ use crate::{
 pub type BuilderApiProd = BuilderApi<
     RedisCache,
     PostgresDatabaseService,
-    OptimisticSimulator<RedisCache, PostgresDatabaseService>,
+    MultiSimulator<OptimisticSimulator<RedisCache, PostgresDatabaseService>>,
     GrpcGossiperClientManager,
 >;
 
@@ -46,7 +56,7 @@ pub type ProposerApiProd = ProposerApi<
 
 pub type DataApiProd = DataApi<PostgresDatabaseService>;
 
-pub type ConstraintsApiProd = ConstraintsApi<RedisCache, PostgresDatabaseService>;
+pub type ConstraintsApiProd = ConstraintsApi<RedisCache>;
 
 pub fn build_router(
     router_config: &mut RouterConfig,
@@ -86,8 +96,7 @@ pub fn build_router(
                 router = router.route(&route.path(), post(BuilderApiProd::submit_block_v2));
             }
             Route::SubmitBlockWithProofs => {
-                router =
-                    router.route(&route.path(), post(BuilderApiProd::submit_block_with_proofs));
+                router = router.route(&route.path(), post(BuilderApiProd::submit_block));
             }
             Route::SubmitHeader => {
                 router = router.route(&route.path(), post(BuilderApiProd::submit_header));
@@ -149,6 +158,8 @@ pub fn build_router(
         }
     }
 
+    router = router.layer(middleware::from_fn(metrics_middleware));
+
     // Add payload size limit
     router = router.layer(RequestBodyLimitLayer::new(MAX_PAYLOAD_LENGTH));
 
@@ -160,9 +171,17 @@ pub fn build_router(
     // Add Error-handling layer
     router = router.layer(
         ServiceBuilder::new()
-            .layer(HandleErrorLayer::new(|_: BoxError| async { StatusCode::REQUEST_TIMEOUT }))
+            .layer(HandleErrorLayer::new(|headers: HeaderMap, e: BoxError| async move {
+                let request_id = extract_request_id(&headers);
+
+                warn!(%request_id, "Request timed out {:?}", e);
+                StatusCode::REQUEST_TIMEOUT
+            }))
             .layer(TimeoutLayer::new(API_REQUEST_TIMEOUT)),
     );
+
+    router = router.layer(PropagateRequestIdLayer::x_request_id());
+    router = router.layer(SetRequestIdLayer::x_request_id(MakeRequestUuid));
 
     // Add Extension layers
     router = router

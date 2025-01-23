@@ -5,7 +5,7 @@ use ethereum_consensus::{
     primitives::{BlsPublicKey, BlsSignature},
     ssz::prelude::*,
 };
-use reth_primitives::{PooledTransactionsElement, TxHash, B256};
+use reth_primitives::{Bytes, PooledTransactionsElement, TxHash, B256};
 use sha2::{Digest, Sha256};
 use tree_hash::Hash256;
 
@@ -61,7 +61,7 @@ pub struct ConstraintsMessage {
 impl SignableBLS for ConstraintsMessage {
     fn digest(&self) -> [u8; 32] {
         let mut hasher = Sha256::new();
-        hasher.update(&self.pubkey.to_vec());
+        hasher.update(self.pubkey.to_vec());
         hasher.update(self.slot.to_le_bytes());
         hasher.update((self.top as u8).to_le_bytes());
         for tx in self.transactions.iter() {
@@ -90,9 +90,11 @@ impl TryFrom<SignedConstraints> for SignedConstraintsWithProofData {
 
     fn try_from(value: SignedConstraints) -> Result<Self, ProofError> {
         let mut transactions = Vec::with_capacity(value.message.transactions.len());
-        for transaction in value.message.transactions.to_vec().iter() {
-            let tx = PooledTransactionsElement::decode_enveloped(transaction.to_vec().into())
-                .map_err(|e| ProofError::DecodingFailed(e.to_string()))?;
+        for transaction in value.message.transactions.iter() {
+            let tx = PooledTransactionsElement::decode_enveloped(Bytes::copy_from_slice(
+                transaction.as_slice(),
+            ))
+            .map_err(|e| ProofError::DecodingFailed(e.to_string()))?;
 
             let tx_hash = *tx.hash();
 

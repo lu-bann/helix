@@ -4,6 +4,7 @@ use std::{
     io::Write,
     panic,
     path::Path,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use ::serde::de;
@@ -13,8 +14,10 @@ use ethereum_consensus::{
     phase0::mainnet::SLOTS_PER_EPOCH,
     ssz::{self, prelude::SimpleSerialize},
 };
+use http::HeaderMap;
 use reth_primitives::{proofs, Address};
 use tracing::{error, info};
+use uuid::Uuid;
 
 pub mod request_encoding;
 pub mod serde;
@@ -122,4 +125,32 @@ pub fn save_to_file(path: String, json: String) {
 
     // Write the JSON string to the file
     file.write_all(json.as_bytes()).expect("Failed to write JSON to file");
+}
+
+// Returns request id from header if exists otherwise returns a random one
+pub fn extract_request_id(headers: &HeaderMap) -> Uuid {
+    headers
+        .get("x-request-id")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| Uuid::parse_str(v).ok())
+        .unwrap_or(Uuid::new_v4())
+}
+
+////// TIME //////
+
+/// Seconds
+pub fn utcnow_sec() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+}
+/// Millis
+pub fn utcnow_ms() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64
+}
+/// Micros
+pub fn utcnow_us() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_micros() as u64
+}
+/// Nanos
+pub fn utcnow_ns() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64
 }

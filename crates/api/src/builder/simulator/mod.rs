@@ -1,4 +1,5 @@
 pub mod mock_simulator;
+pub mod multi_simulator;
 pub mod optimistic_simulator;
 mod optimistic_simulator_tests;
 pub mod rpc_simulator;

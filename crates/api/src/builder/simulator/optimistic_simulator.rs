@@ -4,10 +4,9 @@ use async_trait::async_trait;
 use ethereum_consensus::primitives::{BlsPublicKey, Hash32};
 use reqwest::Client;
 use tokio::sync::{mpsc::Sender, RwLock};
-use tracing::{error, info, warn};
-use uuid::Uuid;
+use tracing::{debug, error, warn, Instrument};
 
-use helix_common::{simulator::BlockSimError, BuilderInfo};
+use helix_common::{metrics::SimulatorMetrics, simulator::BlockSimError, BuilderInfo};
 use helix_database::DatabaseService;
 use helix_datastore::Auctioneer;
 
@@ -58,45 +57,25 @@ impl<A: Auctioneer + 'static, DB: DatabaseService + 'static> OptimisticSimulator
         is_top_bid: bool,
         sim_result_saver_sender: Sender<DbInfo>,
         builder_info: BuilderInfo,
-        request_id: Uuid,
     ) -> Result<(), BlockSimError> {
         if let Err(err) = self
             .simulator
-            .process_request(
-                request.clone(),
-                &builder_info,
-                is_top_bid,
-                sim_result_saver_sender,
-                request_id,
-            )
+            .process_request(request.clone(), &builder_info, is_top_bid, sim_result_saver_sender)
             .await
         {
-            if let BlockSimError::BlockValidationFailed(_) = err {
-                if builder_info.is_optimistic {
-                    if err.is_severe() {
-                        warn!(
-                            request_id=%request_id,
-                            builder=%request.message.builder_public_key,
-                            block_hash=%request.execution_payload.block_hash(),
-                            err=%err,
-                            "Block simulation resulted in an error. Demoting builder...",
-                        );
-                        self.demote_builder_due_to_error(
-                            &request.message.builder_public_key,
-                            request.execution_payload.block_hash(),
-                            err.to_string(),
-                        )
-                        .await;
-                    } else {
-                        warn!(
-                            request_id=%request_id,
-                            builder=%request.message.builder_public_key,
-                            block_hash=%request.execution_payload.block_hash(),
-                            err=%err,
-                            "Block simulation resulted in a non-severe error. NOT demoting builder...",
-                        );
-                    }
-                }
+            if builder_info.is_optimistic {
+                warn!(
+                    builder=%request.message.builder_public_key,
+                    block_hash=%request.execution_payload.block_hash(),
+                    err=%err,
+                    "Block simulation resulted in an error. Demoting builder...",
+                );
+                self.demote_builder_due_to_error(
+                    &request.message.builder_public_key,
+                    request.execution_payload.block_hash(),
+                    err.to_string(),
+                )
+                .await;
             }
             return Err(err)
         }
@@ -113,6 +92,8 @@ impl<A: Auctioneer + 'static, DB: DatabaseService + 'static> OptimisticSimulator
         block_hash: &Hash32,
         reason: String,
     ) {
+        SimulatorMetrics::demotion_count();
+
         if let Err(err) = self.auctioneer.demote_builder(builder_public_key).await {
             *self.failsafe_triggered.write().await = true;
             error!(
@@ -166,33 +147,37 @@ impl<A: Auctioneer, DB: DatabaseService> BlockSimulator for OptimisticSimulator<
         builder_info: &BuilderInfo,
         is_top_bid: bool,
         sim_result_saver_sender: Sender<DbInfo>,
-        request_id: Uuid,
     ) -> Result<bool, BlockSimError> {
         if self.should_process_optimistically(&request, builder_info).await {
-            info!(
-                request_id=%request_id,
+            SimulatorMetrics::sim_count(true);
+
+            debug!(
                 block_hash=%request.execution_payload.block_hash(),
                 "optimistically processing request"
             );
 
             let cloned_self = self.clone_for_async();
             let builder_info = builder_info.clone();
-            tokio::spawn(async move {
-                cloned_self
-                    .handle_simulation(
-                        request,
-                        is_top_bid,
-                        sim_result_saver_sender,
-                        builder_info,
-                        request_id,
-                    )
-                    .await
-            });
+            tokio::spawn(
+                async move {
+                    cloned_self
+                        .handle_simulation(
+                            request,
+                            is_top_bid,
+                            sim_result_saver_sender,
+                            builder_info,
+                        )
+                        .await
+                }
+                .in_current_span(),
+            );
 
             Ok(true)
         } else {
-            info!(
-                request_id=%request_id,
+            SimulatorMetrics::sim_count(false);
+
+            debug!(
+
                 block_hash=?request.execution_payload.block_hash(),
                 block_parent_hash=?request.execution_payload.parent_hash(),
                 block_number=%request.execution_payload.block_number(),
@@ -204,7 +189,6 @@ impl<A: Auctioneer, DB: DatabaseService> BlockSimulator for OptimisticSimulator<
                 is_top_bid,
                 sim_result_saver_sender,
                 builder_info.clone(),
-                request_id,
             )
             .await
             .map(|_| false)

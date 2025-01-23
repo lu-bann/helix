@@ -19,12 +19,14 @@ use helix_common::{
         v2::header_submission::SignedHeaderSubmission, BidSubmission, BidTrace, SignedBidSubmission,
     },
     deneb::SignedValidatorRegistration,
+    metrics::DbMetricRecord,
     simulator::BlockSimError,
     versioned_payload::PayloadAndBlobs,
     BuilderInfo, Filtering, GetHeaderTrace, GetPayloadTrace, GossipedHeaderTrace,
     GossipedPayloadTrace, HeaderSubmissionTrace, ProposerInfo, RelayConfig,
     SignedValidatorRegistrationEntry, SubmissionTrace, ValidatorPreferences, ValidatorSummary,
 };
+use helix_utils::utcnow_ms;
 use tokio_postgres::{types::ToSql, NoTls};
 use tracing::{error, info};
 
@@ -47,6 +49,7 @@ struct RegistrationParams<'a> {
     public_key: &'a [u8],
     signature: &'a [u8],
     inserted_at: SystemTime,
+    user_agent: Option<String>,
 }
 
 struct PreferenceParams<'a> {
@@ -152,6 +155,8 @@ impl PostgresDatabaseService {
     }
 
     pub async fn load_known_validators(&self) {
+        let mut record = DbMetricRecord::new("load_known_validators");
+
         let client = self.pool.get().await.unwrap();
         let rows = client.query("SELECT * FROM known_validators", &[]).await.unwrap();
         for row in rows {
@@ -159,9 +164,13 @@ impl PostgresDatabaseService {
                 parse_bytes_to_pubkey(row.get::<&str, &[u8]>("public_key")).unwrap();
             self.known_validators_cache.insert(public_key);
         }
+
+        record.record_success();
     }
 
     pub async fn load_validator_registrations(&self) {
+        let mut record = DbMetricRecord::new("load_validator_registrations");
+
         match self.get_validator_registrations().await {
             Ok(entries) => {
                 let num_entries = entries.len();
@@ -172,6 +181,7 @@ impl PostgresDatabaseService {
                     );
                 });
                 info!("Loaded {} validator registrations", num_entries);
+                record.record_success();
             }
             Err(e) => {
                 error!("Error loading validator registrations: {}", e);
@@ -218,6 +228,8 @@ impl PostgresDatabaseService {
         &self,
         entries: &[SignedValidatorRegistrationEntry],
     ) -> Result<(), DatabaseError> {
+        let mut record = DbMetricRecord::new("save_validator_registrations");
+
         let mut client = self.pool.get().await?;
 
         let mut sorted_entries = entries.to_vec();
@@ -259,6 +271,7 @@ impl PostgresDatabaseService {
                     public_key: public_key.as_ref(),
                     signature: signature.as_ref(),
                     inserted_at,
+                    user_agent: entry.user_agent.clone(),
                 });
 
                 structured_params_for_pref.push(PreferenceParams {
@@ -288,13 +301,14 @@ impl PostgresDatabaseService {
                         &tuple.public_key,
                         &tuple.signature,
                         &tuple.inserted_at,
+                        &tuple.user_agent,
                     ]
                 })
                 .collect();
 
             // Construct the SQL statement with multiple VALUES clauses
-            let mut sql = String::from("INSERT INTO validator_registrations (fee_recipient, gas_limit, timestamp, public_key, signature, inserted_at) VALUES ");
-            let num_params_per_row = 6;
+            let mut sql = String::from("INSERT INTO validator_registrations (fee_recipient, gas_limit, timestamp, public_key, signature, inserted_at, user_agent) VALUES ");
+            let num_params_per_row = 7;
             let values_clauses: Vec<String> = (0..params.len() / num_params_per_row)
                 .map(|row| {
                     let placeholders: Vec<String> = (1..=num_params_per_row)
@@ -306,7 +320,7 @@ impl PostgresDatabaseService {
 
             // Join the values clauses and append them to the SQL statement
             sql.push_str(&values_clauses.join(", "));
-            sql.push_str(" ON CONFLICT (public_key) DO UPDATE SET fee_recipient = excluded.fee_recipient, gas_limit = excluded.gas_limit, timestamp = excluded.timestamp, signature = excluded.signature, inserted_at = excluded.inserted_at");
+            sql.push_str(" ON CONFLICT (public_key) DO UPDATE SET fee_recipient = excluded.fee_recipient, gas_limit = excluded.gas_limit, timestamp = excluded.timestamp, signature = excluded.signature, inserted_at = excluded.inserted_at, user_agent = excluded.user_agent");
 
             // Execute the query
             transaction.execute(&sql, &params[..]).await?;
@@ -376,6 +390,7 @@ impl PostgresDatabaseService {
             transaction.commit().await?;
         }
 
+        record.record_success();
         Ok(())
     }
 }
@@ -409,7 +424,10 @@ impl DatabaseService for PostgresDatabaseService {
         &self,
         registration_info: ValidatorRegistrationInfo,
         pool_name: Option<String>,
+        user_agent: Option<String>,
     ) -> Result<(), DatabaseError> {
+        let mut record = DbMetricRecord::new("save_validator_registration");
+
         let registration = registration_info.registration.message.clone();
 
         if let Some(entry) = self.validator_registration_cache.get(&registration.public_key) {
@@ -447,15 +465,16 @@ impl DatabaseService for PostgresDatabaseService {
 
         match transaction.execute(
             "
-                INSERT INTO validator_registrations (fee_recipient, gas_limit, timestamp, public_key, signature, inserted_at)
-                VALUES ($1, $2, $3, $4, $5,$6)
+                INSERT INTO validator_registrations (fee_recipient, gas_limit, timestamp, public_key, signature, inserted_at, user_agent)
+                VALUES ($1, $2, $3, $4, $5,$6,$7)
                 ON CONFLICT (public_key)
                 DO UPDATE SET
                     fee_recipient = excluded.fee_recipient,
                     gas_limit = excluded.gas_limit,
                     timestamp = excluded.timestamp,
                     signature = excluded.signature,
-                    inserted_at = excluded.inserted_at
+                    inserted_at = excluded.inserted_at,
+                    user_agent = excluded.user_agent
             ",
             &[
                 &(fee_recipient.as_ref()),
@@ -464,6 +483,7 @@ impl DatabaseService for PostgresDatabaseService {
                 &(public_key.as_ref()),
                 &(signature.as_ref()),
                 &(inserted_at),
+                &(user_agent)
             ],
         ).await {
             Ok(_) => {
@@ -471,6 +491,7 @@ impl DatabaseService for PostgresDatabaseService {
                     registration_info,
                     inserted_at: inserted_at.duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
                     pool_name,
+                    user_agent,
                 });
             }
             Err(e) => {
@@ -480,6 +501,7 @@ impl DatabaseService for PostgresDatabaseService {
 
         transaction.commit().await?;
 
+        record.record_success();
         Ok(())
     }
 
@@ -487,7 +509,10 @@ impl DatabaseService for PostgresDatabaseService {
         &self,
         mut entries: Vec<ValidatorRegistrationInfo>,
         pool_name: Option<String>,
+        user_agent: Option<String>,
     ) -> Result<(), DatabaseError> {
+        let mut record = DbMetricRecord::new("save_validator_registrations");
+
         entries.retain(|entry| {
             if let Some(existing_entry) =
                 self.validator_registration_cache.get(&entry.registration.message.public_key)
@@ -506,10 +531,15 @@ impl DatabaseService for PostgresDatabaseService {
                 .insert(entry.registration.message.public_key.clone());
             self.validator_registration_cache.insert(
                 entry.registration.message.public_key.clone(),
-                SignedValidatorRegistrationEntry::new(entry.clone(), pool_name.clone()),
+                SignedValidatorRegistrationEntry::new(
+                    entry.clone(),
+                    pool_name.clone(),
+                    user_agent.clone(),
+                ),
             );
         }
 
+        record.record_success();
         Ok(())
     }
 
@@ -518,6 +548,8 @@ impl DatabaseService for PostgresDatabaseService {
         validator_keys: &[BlsPublicKey],
         trusted_builders: &[String],
     ) -> Result<(), DatabaseError> {
+        let mut record = DbMetricRecord::new("update_trusted_builders");
+
         let client = self.pool.get().await?;
         client
             .execute(
@@ -529,6 +561,7 @@ impl DatabaseService for PostgresDatabaseService {
             )
             .await?;
 
+        record.record_success();
         Ok(())
     }
 
@@ -552,6 +585,8 @@ impl DatabaseService for PostgresDatabaseService {
         &self,
         pub_key: BlsPublicKey,
     ) -> Result<SignedValidatorRegistrationEntry, DatabaseError> {
+        let mut record = DbMetricRecord::new("get_validator_registration");
+
         match self
             .pool
             .get()
@@ -568,7 +603,8 @@ impl DatabaseService for PostgresDatabaseService {
                     validator_preferences.trusted_builders,
                     validator_preferences.header_delay,
                     validator_preferences.gossip_blobs,
-                    validator_registrations.inserted_at
+                    validator_registrations.inserted_at,
+                    validator_registrations.user_agent
                 FROM validator_registrations
                 INNER JOIN validator_preferences ON validator_registrations.public_key = validator_preferences.public_key
                 WHERE validator_registrations.public_key = $1
@@ -578,33 +614,42 @@ impl DatabaseService for PostgresDatabaseService {
             .await?
         {
             rows if rows.is_empty() => Err(DatabaseError::ValidatorRegistrationNotFound),
-            rows => parse_row(rows.first().unwrap()),
+            rows => {
+                record.record_success();
+                parse_row(rows.first().unwrap())
+            },
         }
     }
 
     async fn get_validator_registrations(
         &self,
     ) -> Result<Vec<SignedValidatorRegistrationEntry>, DatabaseError> {
-        parse_rows(
-            self.pool
-                .get()
-                .await?
-                .query(
-                    "
-                            SELECT * FROM validator_registrations
-                            INNER JOIN validator_preferences
-                            ON validator_registrations.public_key = validator_preferences.public_key
-                        ",
-                    &[],
-                )
-                .await?,
-        )
+        let mut record = DbMetricRecord::new("get_validator_registrations");
+
+        let rows = self
+            .pool
+            .get()
+            .await?
+            .query(
+                "
+                    SELECT * FROM validator_registrations
+                    INNER JOIN validator_preferences
+                    ON validator_registrations.public_key = validator_preferences.public_key
+                ",
+                &[],
+            )
+            .await?;
+
+        record.record_success();
+        parse_rows(rows)
     }
 
     async fn get_validator_registrations_for_pub_keys(
         &self,
         pub_keys: Vec<BlsPublicKey>,
     ) -> Result<Vec<SignedValidatorRegistrationEntry>, DatabaseError> {
+        let mut record = DbMetricRecord::new("get_validator_registrations_for_pub_keys");
+
         let client = self.pool.get().await.map_err(DatabaseError::from)?;
 
         // Constructing the query
@@ -628,7 +673,10 @@ impl DatabaseService for PostgresDatabaseService {
         let params_slice: Vec<&(dyn ToSql + Sync)> =
             params.iter().map(|b| b.as_ref() as &(dyn ToSql + Sync)).collect();
 
-        parse_rows(client.query(&stmt, &params_slice).await.map_err(DatabaseError::from)?)
+        let rows = client.query(&stmt, &params_slice).await.map_err(DatabaseError::from)?;
+
+        record.record_success();
+        parse_rows(rows)
     }
 
     async fn get_validator_registration_timestamp(
@@ -642,13 +690,15 @@ impl DatabaseService for PostgresDatabaseService {
         &self,
         proposer_duties: Vec<BuilderGetValidatorsResponseEntry>,
     ) -> Result<(), DatabaseError> {
+        let mut record = DbMetricRecord::new("set_proposer_duties");
+
         let mut client = self.pool.get().await?;
         let transaction = client.transaction().await?;
 
         transaction
             .execute(
                 "
-                INSERT INTO proposer_duties_archive SELECT * FROM proposer_duties ON CONFLICT (slot_number) DO UPDATE SET public_key = excluded.public_key, validator_index = excluded.validator_index;
+                INSERT INTO proposer_duties_archive SELECT * FROM proposer_duties order by slot_number ON CONFLICT (slot_number) DO UPDATE SET public_key = excluded.public_key, validator_index = excluded.validator_index;
             ",
                 &[],
             )
@@ -702,34 +752,41 @@ impl DatabaseService for PostgresDatabaseService {
 
         transaction.commit().await?;
 
+        record.record_success();
         Ok(())
     }
 
     async fn get_proposer_duties(
         &self,
     ) -> Result<Vec<BuilderGetValidatorsResponseEntry>, DatabaseError> {
-        parse_rows(
-            self.pool
-                .get()
-                .await?
-                .query(
-                    "
+        let mut record = DbMetricRecord::new("get_proposer_duties");
+
+        let rows = self
+            .pool
+            .get()
+            .await?
+            .query(
+                "
                             SELECT * FROM proposer_duties
                             INNER JOIN validator_registrations
                             ON proposer_duties.public_key = validator_registrations.public_key
                             INNER JOIN validator_preferences
                             ON proposer_duties.public_key = validator_preferences.public_key
                         ",
-                    &[],
-                )
-                .await?,
-        )
+                &[],
+            )
+            .await?;
+
+        record.record_success();
+        parse_rows(rows)
     }
 
     async fn set_known_validators(
         &self,
         known_validators: Vec<ValidatorSummary>,
     ) -> Result<(), DatabaseError> {
+        let mut record = DbMetricRecord::new("set_known_validators");
+
         info!("Known validators: current cache size: {:?}", self.known_validators_cache.len());
 
         let mut client = self.pool.get().await?;
@@ -793,6 +850,7 @@ impl DatabaseService for PostgresDatabaseService {
 
         transaction.commit().await?;
 
+        record.record_success();
         Ok(())
     }
 
@@ -800,6 +858,8 @@ impl DatabaseService for PostgresDatabaseService {
         &self,
         public_keys: Vec<BlsPublicKey>,
     ) -> Result<HashSet<BlsPublicKey>, DatabaseError> {
+        let mut record = DbMetricRecord::new("check_known_validators");
+
         let client = self.pool.get().await?;
         let mut pub_keys = HashSet::new();
 
@@ -822,6 +882,7 @@ impl DatabaseService for PostgresDatabaseService {
             }
         }
 
+        record.record_success();
         Ok(pub_keys)
     }
 
@@ -829,6 +890,8 @@ impl DatabaseService for PostgresDatabaseService {
         &self,
         api_key: &str,
     ) -> Result<Option<String>, DatabaseError> {
+        let mut record = DbMetricRecord::new("get_validator_pool_name");
+
         let client = self.pool.get().await?;
 
         if self.validator_pool_cache.is_empty() {
@@ -864,6 +927,7 @@ impl DatabaseService for PostgresDatabaseService {
 
         self.validator_pool_cache.insert(api_key.to_string(), name.clone());
 
+        record.record_success();
         Ok(Some(name))
     }
 
@@ -875,6 +939,8 @@ impl DatabaseService for PostgresDatabaseService {
         message_received: u64,
         payload_fetched: u64,
     ) -> Result<(), DatabaseError> {
+        let mut record = DbMetricRecord::new("save_too_late_get_payload");
+
         let region_id = self.region;
         self.pool
             .get()
@@ -896,6 +962,8 @@ impl DatabaseService for PostgresDatabaseService {
                 ],
             )
             .await?;
+
+        record.record_success();
         Ok(())
     }
 
@@ -904,16 +972,19 @@ impl DatabaseService for PostgresDatabaseService {
         bid_trace: &BidTrace,
         payload: Arc<PayloadAndBlobs>,
         latency_trace: &GetPayloadTrace,
+        user_agent: Option<String>,
     ) -> Result<(), DatabaseError> {
+        let mut record = DbMetricRecord::new("save_delivered_payload");
+
         let region_id = self.region;
         let mut client = self.pool.get().await?;
         let transaction = client.transaction().await?;
         transaction.execute(
             "
                 INSERT INTO delivered_payload 
-                    (block_hash, payload_parent_hash, fee_recipient, state_root, receipts_root, logs_bloom, prev_randao, timestamp, block_number, gas_limit, gas_used, extra_data, base_fee_per_gas)
+                    (block_hash, payload_parent_hash, fee_recipient, state_root, receipts_root, logs_bloom, prev_randao, timestamp, block_number, gas_limit, gas_used, extra_data, base_fee_per_gas, user_agent)
                 VALUES 
-                    ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                    ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 ON CONFLICT (block_hash)
                 DO NOTHING
             ",
@@ -931,6 +1002,7 @@ impl DatabaseService for PostgresDatabaseService {
                 &(payload.execution_payload.gas_used() as i32),
                 &(payload.execution_payload.extra_data().as_ref()),
                 &(PostgresNumeric::from(*payload.execution_payload.base_fee_per_gas())),
+                &(user_agent),
             ],
             ).await?;
 
@@ -1055,15 +1127,19 @@ impl DatabaseService for PostgresDatabaseService {
         }
 
         transaction.commit().await?;
+
+        record.record_success();
         Ok(())
     }
 
     async fn store_block_submission(
         &self,
         submission: Arc<SignedBidSubmission>,
-        trace: Arc<SubmissionTrace>,
+        trace: SubmissionTrace,
         optimistic_version: i16,
     ) -> Result<(), DatabaseError> {
+        let mut record = DbMetricRecord::new("store_block_submission");
+
         let region_id = self.region;
         let mut client = self.pool.get().await?;
         let transaction = client.transaction().await?;
@@ -1117,8 +1193,23 @@ impl DatabaseService for PostgresDatabaseService {
             ],
         ).await?;
 
+        transaction.execute(
+            "
+                INSERT INTO slot_preferences (slot_number, proposer_pubkey, filtering, trusted_builders, header_delay, gossip_blobs)
+                SELECT $1, $2, filtering, trusted_builders, header_delay, gossip_blobs
+                FROM validator_preferences
+                WHERE public_key = $2
+                ON CONFLICT (slot_number) DO NOTHING;                
+            ",
+            &[
+                &(submission.slot() as i32),
+                &(submission.proposer_public_key().as_ref()),
+            ],
+            ).await?;
+
         transaction.commit().await?;
 
+        record.record_success();
         Ok(())
     }
 
@@ -1127,6 +1218,8 @@ impl DatabaseService for PostgresDatabaseService {
         builder_pub_key: &BlsPublicKey,
         builder_info: &BuilderInfo,
     ) -> Result<(), DatabaseError> {
+        let mut record = DbMetricRecord::new("store_builder_info");
+
         self.pool
             .get()
             .await?
@@ -1148,6 +1241,7 @@ impl DatabaseService for PostgresDatabaseService {
             )
             .await?;
 
+        record.record_success();
         Ok(())
     }
 
@@ -1155,12 +1249,15 @@ impl DatabaseService for PostgresDatabaseService {
         &self,
         builders: &[BuilderInfoDocument],
     ) -> Result<(), DatabaseError> {
+        let mut record = DbMetricRecord::new("store_builders_info");
+
         // PERF: this is not the most performant approach but it is expected
         // to add just a few builders only at startup
         for builder in builders {
             self.store_builder_info(&builder.pub_key, &builder.builder_info).await?;
         }
 
+        record.record_success();
         Ok(())
     }
 
@@ -1168,6 +1265,8 @@ impl DatabaseService for PostgresDatabaseService {
         &self,
         builder_pub_key: &BlsPublicKey,
     ) -> Result<BuilderInfo, DatabaseError> {
+        let mut record = DbMetricRecord::new("get_builder_info");
+
         match self
             .pool
             .get()
@@ -1184,19 +1283,30 @@ impl DatabaseService for PostgresDatabaseService {
             rows if rows.is_empty() => {
                 Err(DatabaseError::BuilderInfoNotFound { public_key: builder_pub_key.clone() })
             }
-            rows => parse_row(rows.first().unwrap()),
+            rows => {
+                record.record_success();
+                parse_row(rows.first().unwrap())
+            }
         }
     }
 
     async fn get_all_builder_infos(&self) -> Result<Vec<BuilderInfoDocument>, DatabaseError> {
-        parse_rows(self.pool.get().await?.query("SELECT * FROM builder_info", &[]).await?)
+        let mut record = DbMetricRecord::new("get_all_builder_infos");
+
+        let rows = self.pool.get().await?.query("SELECT * FROM builder_info", &[]).await?;
+
+        record.record_success();
+        parse_rows(rows)
     }
 
     async fn check_builder_api_key(&self, api_key: &str) -> Result<bool, DatabaseError> {
+        let mut record = DbMetricRecord::new("check_builder_api_key");
+
         let client = self.pool.get().await?;
         let rows =
             client.query("SELECT * FROM builder_info WHERE api_key = $1", &[&(api_key)]).await?;
 
+        record.record_success();
         Ok(!rows.is_empty())
     }
 
@@ -1206,6 +1316,8 @@ impl DatabaseService for PostgresDatabaseService {
         block_hash: &Hash32,
         reason: String,
     ) -> Result<(), DatabaseError> {
+        let mut record = DbMetricRecord::new("db_demote_builder");
+
         let mut client = self.pool.get().await?;
         let transaction = client.transaction().await?;
         transaction
@@ -1219,7 +1331,7 @@ impl DatabaseService for PostgresDatabaseService {
             )
             .await?;
 
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
+        let timestamp = utcnow_ms();
         transaction
             .execute(
                 "
@@ -1237,6 +1349,7 @@ impl DatabaseService for PostgresDatabaseService {
 
         transaction.commit().await?;
 
+        record.record_success();
         Ok(())
     }
 
@@ -1245,6 +1358,8 @@ impl DatabaseService for PostgresDatabaseService {
         block_hash: ByteVector<32>,
         block_sim_result: Result<(), BlockSimError>,
     ) -> Result<(), DatabaseError> {
+        let mut record = DbMetricRecord::new("save_simulation_result");
+
         if let Err(e) = block_sim_result {
             self.pool
                 .get()
@@ -1260,13 +1375,18 @@ impl DatabaseService for PostgresDatabaseService {
                 )
                 .await?;
         }
+
+        record.record_success();
         Ok(())
     }
 
     async fn get_bids(
         &self,
         filters: &BidFilters,
+        validator_preferences: Arc<ValidatorPreferences>,
     ) -> Result<Vec<BidSubmissionDocument>, DatabaseError> {
+        let mut record = DbMetricRecord::new("get_bids");
+
         let filters = PgBidFilters::from(filters);
 
         let mut query = String::from("
@@ -1287,8 +1407,25 @@ impl DatabaseService for PostgresDatabaseService {
                 block_submission
             LEFT JOIN
                 header_submission ON block_submission.block_hash = header_submission.block_hash
-            WHERE 1 = 1
         ");
+
+        let filtering = match validator_preferences.filtering {
+            Filtering::Regional => Some(1_i16),
+            Filtering::Global => None,
+        };
+
+        if filtering.is_some() {
+            query.push_str(
+                "
+                LEFT JOIN
+                    slot_preferences
+                ON
+                    block_submission.slot_number = slot_preferences.slot_number
+            ",
+            );
+        }
+
+        query.push_str(" WHERE 1 = 1");
 
         let mut param_index = 1;
         let mut params: Vec<Box<dyn ToSql + Sync + Send>> = Vec::new();
@@ -1320,12 +1457,24 @@ impl DatabaseService for PostgresDatabaseService {
         if let Some(block_hash) = filters.block_hash() {
             query.push_str(&format!(" AND block_submission.block_hash = ${}", param_index));
             params.push(Box::new(block_hash));
+            param_index += 1;
+        }
+
+        if let Some(filtering) = filtering {
+            query.push_str(&format!(
+                " AND (slot_preferences.filtering = ${} OR slot_preferences.filtering IS NULL)",
+                param_index
+            ));
+            params.push(Box::new(filtering));
         }
 
         let params_refs: Vec<&(dyn ToSql + Sync)> =
             params.iter().map(|p| &**p as &(dyn ToSql + Sync)).collect();
 
-        parse_rows(self.pool.get().await?.query(&query, &params_refs[..]).await?)
+        let rows = self.pool.get().await?.query(&query, &params_refs[..]).await?;
+
+        record.record_success();
+        parse_rows(rows)
     }
 
     async fn get_delivered_payloads(
@@ -1333,6 +1482,8 @@ impl DatabaseService for PostgresDatabaseService {
         filters: &BidFilters,
         validator_preferences: Arc<ValidatorPreferences>,
     ) -> Result<Vec<DeliveredPayloadDocument>, DatabaseError> {
+        let mut record = DbMetricRecord::new("get_delivered_payloads");
+
         let filters = PgBidFilters::from(filters);
         let mut query = String::from(
             "
@@ -1348,12 +1499,12 @@ impl DatabaseService for PostgresDatabaseService {
                 block_submission.gas_used               gas_used,
                 block_submission.block_number           block_number,
                 block_submission.num_txs                num_txs
-            FROM 
-                delivered_payload 
+            FROM
+                block_submission
             INNER JOIN
-                block_submission 
-            ON 
-                block_submission.block_hash = delivered_payload.block_hash
+                delivered_payload
+            ON
+                block_submission.block_number = delivered_payload.block_number and block_submission.block_hash = delivered_payload.block_hash
         ",
         );
 
@@ -1447,7 +1598,9 @@ impl DatabaseService for PostgresDatabaseService {
         let params_refs: Vec<&(dyn ToSql + Sync)> =
             params.iter().map(|p| &**p as &(dyn ToSql + Sync)).collect();
 
-        parse_rows(self.pool.get().await?.query(&query, &params_refs[..]).await?)
+        let rows = self.pool.get().await?.query(&query, &params_refs[..]).await?;
+        record.record_success();
+        parse_rows(rows)
     }
 
     async fn save_get_header_call(
@@ -1459,6 +1612,8 @@ impl DatabaseService for PostgresDatabaseService {
         trace: GetHeaderTrace,
         user_agent: Option<String>,
     ) -> Result<(), DatabaseError> {
+        let mut record = DbMetricRecord::new("save_get_header_call");
+
         let region_id = self.region;
 
         let mut client = self.pool.get().await?;
@@ -1503,6 +1658,7 @@ impl DatabaseService for PostgresDatabaseService {
 
         transaction.commit().await?;
 
+        record.record_success();
         Ok(())
     }
 
@@ -1513,6 +1669,8 @@ impl DatabaseService for PostgresDatabaseService {
         error: String,
         trace: GetPayloadTrace,
     ) -> Result<(), DatabaseError> {
+        let mut record = DbMetricRecord::new("save_failed_get_payload");
+
         let region_id = self.region;
 
         let mut client = self.pool.get().await?;
@@ -1553,14 +1711,17 @@ impl DatabaseService for PostgresDatabaseService {
 
         transaction.commit().await?;
 
+        record.record_success();
         Ok(())
     }
 
     async fn store_header_submission(
         &self,
         submission: Arc<SignedHeaderSubmission>,
-        trace: Arc<HeaderSubmissionTrace>,
+        trace: HeaderSubmissionTrace,
     ) -> Result<(), DatabaseError> {
+        let mut record = DbMetricRecord::new("store_header_submission");
+
         let region_id = self.region;
         let mut client = self.pool.get().await?;
         let transaction = client.transaction().await?;
@@ -1613,14 +1774,17 @@ impl DatabaseService for PostgresDatabaseService {
 
         transaction.commit().await?;
 
+        record.record_success();
         Ok(())
     }
 
     async fn save_gossiped_header_trace(
         &self,
         block_hash: ByteVector<32>,
-        trace: Arc<GossipedHeaderTrace>,
+        trace: GossipedHeaderTrace,
     ) -> Result<(), DatabaseError> {
+        let mut record = DbMetricRecord::new("save_gossiped_header_trace");
+
         let region_id = self.region;
 
         self.pool.get().await?.execute(
@@ -1639,14 +1803,18 @@ impl DatabaseService for PostgresDatabaseService {
                 &(trace.auctioneer_update as i64),
             ],
         ).await?;
+
+        record.record_success();
         Ok(())
     }
 
     async fn save_gossiped_payload_trace(
         &self,
         block_hash: ByteVector<32>,
-        trace: Arc<GossipedPayloadTrace>,
+        trace: GossipedPayloadTrace,
     ) -> Result<(), DatabaseError> {
+        let mut record = DbMetricRecord::new("save_gossiped_payload_trace");
+
         let region_id = self.region;
 
         self.pool.get().await?.execute(
@@ -1664,21 +1832,26 @@ impl DatabaseService for PostgresDatabaseService {
                 &(trace.auctioneer_update as i64),
             ],
         ).await?;
+
+        record.record_success();
         Ok(())
     }
 
     async fn get_trusted_proposers(&self) -> Result<Vec<ProposerInfo>, DatabaseError> {
-        parse_rows(
-            self.pool
-                .get()
-                .await?
-                .query(
-                    "
-                    SELECT * FROM trusted_proposers 
-                ",
-                    &[],
-                )
-                .await?,
-        )
+        let mut record = DbMetricRecord::new("get_trusted_proposers");
+        let rows = self
+            .pool
+            .get()
+            .await?
+            .query(
+                "
+                SELECT * FROM trusted_proposers 
+            ",
+                &[],
+            )
+            .await?;
+
+        record.record_success();
+        parse_rows(rows)
     }
 }
