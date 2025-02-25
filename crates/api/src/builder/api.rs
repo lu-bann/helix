@@ -439,26 +439,26 @@ where
         // NOTE: this check must always be performed because otherwise a builder might trick
         // the relay into accepting as best bid a block without invalid inclusion proofs when they
         // are needed.
-        if let Some(constraints) = api.auctioneer.get_constraints(payload.slot()).await? {
-            let should_verify_and_save_proofs = api
-                .relay_config
-                .constraints_api_config
-                .max_block_value_to_verify_wei
-                .map_or(true, |max_block_value_to_verify| {
-                    payload.value() <= max_block_value_to_verify
-                });
-            if should_verify_and_save_proofs {
-                if let Err(err) = api.verify_and_save_inclusion_proofs(&payload, constraints).await
-                {
-                    warn!(%err, "failed to verify and save inclusion proofs");
-                    return Err(err)
-                }
-            } else {
-                info!(block_value = %payload.value(), "block value is greater than max value to verify, inclusion proof verification and saving is skipped");
-            }
-        } else {
-            info!("no constraints found for slot, proof verification is not needed");
-        }
+        // if let Some(constraints) = api.auctioneer.get_constraints(payload.slot()).await? {
+        //     let should_verify_and_save_proofs = api
+        //         .relay_config
+        //         .constraints_api_config
+        //         .max_block_value_to_verify_wei
+        //         .map_or(true, |max_block_value_to_verify| {
+        //             payload.value() <= max_block_value_to_verify
+        //         });
+        //     if should_verify_and_save_proofs {
+        //         if let Err(err) = api.verify_and_save_inclusion_proofs(&payload, constraints).await
+        //         {
+        //             warn!(%err, "failed to verify and save inclusion proofs");
+        //             return Err(err)
+        //         }
+        //     } else {
+        //         info!(block_value = %payload.value(), "block value is greater than max value to verify, inclusion proof verification and saving is skipped");
+        //     }
+        // } else {
+        //     info!("no constraints found for slot, proof verification is not needed");
+        // }
 
         // If cancellations are enabled, then abort now if there is a later submission
         if is_cancellations_enabled {
