@@ -301,12 +301,13 @@ impl PostgresDatabaseService {
                         &tuple.signature,
                         &tuple.inserted_at,
                         &tuple.user_agent,
+                        &true,
                     ]
                 })
                 .collect();
 
             // Construct the SQL statement with multiple VALUES clauses
-            let mut sql = String::from("INSERT INTO validator_registrations (fee_recipient, gas_limit, timestamp, public_key, signature, inserted_at, user_agent) VALUES ");
+            let mut sql = String::from("INSERT INTO validator_registrations (fee_recipient, gas_limit, timestamp, public_key, signature, inserted_at, user_agent, active) VALUES ");
             let num_params_per_row = 8;
             let values_clauses: Vec<String> = (0..params.len() / num_params_per_row)
                 .map(|row| {
@@ -333,13 +334,14 @@ impl PostgresDatabaseService {
                         &tuple.trusted_builders,
                         &tuple.header_delay,
                         &tuple.gossip_blobs,
+                        &(650 as i64),
                     ]
                 })
                 .collect();
 
             // Construct the SQL statement with multiple VALUES clauses
             let mut sql =
-                String::from("INSERT INTO validator_preferences (public_key, filtering, trusted_builders, header_delay, gossip_blobs) VALUES ");
+                String::from("INSERT INTO validator_preferences (public_key, filtering, trusted_builders, header_delay, gossip_blobs, delay_ms) VALUES ");
             let num_params_per_row = 6;
             let values_clauses: Vec<String> = (0..params.len() / num_params_per_row)
                 .map(|row| {
@@ -357,8 +359,7 @@ impl PostgresDatabaseService {
                             filtering = excluded.filtering, 
                             trusted_builders = excluded.trusted_builders, 
                             header_delay = excluded.header_delay,
-                            gossip_blobs = excluded.gossip_blobs
-                        WHERE validator_preferences.manual_override = FALSE",
+                            gossip_blobs = excluded.gossip_blobs",
             );
 
             // Execute the query
