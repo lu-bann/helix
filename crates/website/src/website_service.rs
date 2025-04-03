@@ -1,6 +1,14 @@
-use crate::state::{AppState, CachedTemplates};
-use axum::{routing::get, Router};
 use std::{net::SocketAddr, sync::Arc};
+
+use axum::{routing::get, Router};
+use helix_beacon_client::{
+    beacon_client::BeaconClient, multi_beacon_client::MultiBeaconClient, MultiBeaconClientTrait,
+};
+use helix_common::{chain_info::ChainInfo, NetworkConfig, RelayConfig};
+use helix_database::postgres::postgres_db_service::PostgresDatabaseService;
+use helix_datastore::MockAuctioneer; // Import MockAuctioneer from the appropriate module
+use helix_housekeeper::{ChainEventUpdater, ChainUpdate};
+use helix_utils::signing::compute_builder_domain;
 use tokio::{
     net::TcpListener,
     sync::{broadcast, mpsc, RwLock},
@@ -8,17 +16,12 @@ use tokio::{
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    handlers, models::DeliveredPayload, postgres_db_website::WebsiteDatabaseService,
+    handlers,
+    models::DeliveredPayload,
+    postgres_db_website::WebsiteDatabaseService,
+    state::{AppState, CachedTemplates},
     templates::IndexTemplate,
 };
-use helix_beacon_client::{
-    beacon_client::BeaconClient, multi_beacon_client::MultiBeaconClient, MultiBeaconClientTrait,
-};
-use helix_common::{chain_info::ChainInfo, NetworkConfig, RelayConfig};
-use helix_database::postgres::postgres_db_service::PostgresDatabaseService;
-use helix_housekeeper::{ChainEventUpdater, ChainUpdate};
-use helix_utils::signing::compute_builder_domain;
-use hex::encode as hex_encode;
 
 pub struct WebsiteService {}
 
@@ -78,7 +81,7 @@ impl WebsiteService {
 
         // Create the ChainEventUpdater and subscription
         let (mut chain_updater, chain_update_subscription) =
-            ChainEventUpdater::new(db.clone(), chain_info.clone());
+            ChainEventUpdater::new(db.clone(), Arc::new(MockAuctioneer::new()), chain_info.clone());
         info!("ChainEventUpdater initialized");
 
         let (head_event_tx, head_event_rx) = broadcast::channel(100);
@@ -163,7 +166,7 @@ impl WebsiteService {
             Ok(val) => val,
             Err(e) => {
                 error!("Failed to get number of network validators: {:?}", e);
-                return Err(Box::new(e))
+                return Err(Box::new(e));
             }
         };
         debug!("Fetched num_network_validators: {}", num_network_validators);
@@ -172,7 +175,7 @@ impl WebsiteService {
             Ok(val) => val,
             Err(e) => {
                 error!("Failed to get number of registered validators: {:?}", e);
-                return Err(Box::new(e))
+                return Err(Box::new(e));
             }
         };
         debug!("Fetched num_registered_validators: {}", num_registered_validators);
@@ -181,7 +184,7 @@ impl WebsiteService {
             Ok(val) => val,
             Err(e) => {
                 error!("Failed to get recent delivered payloads: {:?}", e);
-                return Err(Box::new(e))
+                return Err(Box::new(e));
             }
         };
         debug!("Fetched {} recent payloads", recent_payloads.len());
@@ -190,7 +193,7 @@ impl WebsiteService {
             Ok(val) => val,
             Err(e) => {
                 error!("Failed to get number of delivered payloads: {:?}", e);
-                return Err(Box::new(e))
+                return Err(Box::new(e));
             }
         };
         debug!("Fetched num_delivered_payloads: {}", num_delivered_payloads);
@@ -275,14 +278,16 @@ impl WebsiteService {
             link_beaconchain: state.website_config.link_beaconchain.clone(),
             link_etherscan: state.website_config.link_etherscan.clone(),
             link_data_api: state.website_config.link_data_api.clone(),
-            capella_fork_version: hex_encode(state.chain_info.context.capella_fork_version),
-            bellatrix_fork_version: hex_encode(state.chain_info.context.bellatrix_fork_version),
-            genesis_fork_version: hex_encode(state.chain_info.context.genesis_fork_version),
-            genesis_validators_root: hex_encode(
-                state.chain_info.genesis_validators_root.as_ref() as &[u8]
+            capella_fork_version: alloy::hex::encode(state.chain_info.context.capella_fork_version),
+            bellatrix_fork_version: alloy::hex::encode(
+                state.chain_info.context.bellatrix_fork_version,
+            ),
+            genesis_fork_version: alloy::hex::encode(state.chain_info.context.genesis_fork_version),
+            genesis_validators_root: alloy::hex::encode(
+                state.chain_info.genesis_validators_root.as_ref() as &[u8],
             ),
             builder_signing_domain: compute_builder_domain(&state.chain_info.context)
-                .map(hex_encode)
+                .map(alloy::hex::encode)
                 .unwrap_or_else(|_e| String::from("Error computing builder domain")),
         })
     }

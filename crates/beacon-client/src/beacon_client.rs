@@ -3,15 +3,14 @@ use std::{sync::Arc, time::Duration};
 use async_trait::async_trait;
 use ethereum_consensus::{primitives::Root, ssz};
 use futures::StreamExt;
+use helix_common::{
+    beacon_api::PublishBlobsRequest, bellatrix::Serializable,
+    signed_proposal::VersionedSignedProposal, BeaconClientConfig, ProposerDuty, ValidatorSummary,
+};
 use reqwest::header::CONTENT_TYPE;
 use reqwest_eventsource::EventSource;
 use tokio::{sync::broadcast::Sender, time::sleep};
 use tracing::{debug, error, warn};
-
-use helix_common::{
-    beacon_api::PublishBlobsRequest, bellatrix::SimpleSerialize,
-    signed_proposal::VersionedSignedProposal, BeaconClientConfig, ProposerDuty, ValidatorSummary,
-};
 
 use crate::{
     error::{ApiError, BeaconClientError},
@@ -188,7 +187,7 @@ impl BeaconClientTrait for BeaconClient {
 
     /// `publish_block` publishes the signed beacon block ssz-encoded via
     /// <https://ethereum.github.io/beacon-APIs/#/ValidatorRequiredApi/publishBlockV2>
-    async fn publish_block<SB: Send + Sync + SimpleSerialize>(
+    async fn publish_block<SB: Send + Sync + Serializable>(
         &self,
         block: Arc<SB>,
         broadcast_validation: Option<BroadcastValidation>,
@@ -259,10 +258,11 @@ impl BeaconClientTrait for BeaconClient {
 
 #[cfg(test)]
 mod beacon_client_tests {
-    use super::*;
     use mockito::Matcher;
     use tokio::sync::broadcast::channel;
     use url::Url;
+
+    use super::*;
 
     #[tokio::test]
     async fn test_get_sync_status_ok() {

@@ -1,9 +1,10 @@
-use crate::models::DeliveredPayload;
 use askama::Template;
+
+use crate::models::DeliveredPayload;
 
 //Askama filters
 pub mod filters {
-    use alloy_primitives::utils::format_units;
+    use alloy::primitives::utils::format_units;
     use askama::{Error, Result};
     use ethereum_consensus::primitives::U256;
     use num_format::{Locale, ToFormattedString};

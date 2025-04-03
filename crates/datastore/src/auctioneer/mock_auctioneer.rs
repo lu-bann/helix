@@ -5,12 +5,12 @@ use std::{
 
 use async_trait::async_trait;
 use ethereum_consensus::primitives::{BlsPublicKey, Hash32, U256};
-
 use helix_common::{
     api::constraints_api::{SignedDelegation, SignedRevocation},
     bellatrix::Node,
     bid_submission::{
-        v2::header_submission::SignedHeaderSubmission, BidTrace, SignedBidSubmission,
+        v2::header_submission::SignedHeaderSubmission,
+        v3::header_submission_v3::PayloadSocketAddress, BidTrace, SignedBidSubmission,
     },
     eth::SignedBuilderBid,
     pending_block::PendingBlock,
@@ -128,7 +128,7 @@ impl Auctioneer for MockAuctioneer {
         // check if the value is 9999 and than return an error for testing
         if let Some(bid) = self.best_bid.lock().unwrap().clone() {
             if bid.value() == U256::from(9999) {
-                return Err(AuctioneerError::UnexpectedValueType)
+                return Err(AuctioneerError::UnexpectedValueType);
             }
         }
         Ok(self.best_bid.lock().unwrap().clone())
@@ -365,5 +365,20 @@ impl Auctioneer for MockAuctioneer {
 
     async fn disable_kill_switch(&self) -> Result<(), AuctioneerError> {
         Ok(())
+    }
+
+    async fn save_payload_address(
+        &self,
+        _block_hash: &Hash32,
+        _payload_socket_address: PayloadSocketAddress,
+    ) -> Result<(), AuctioneerError> {
+        Ok(())
+    }
+
+    async fn get_payload_address(
+        &self,
+        _block_hash: &Hash32,
+    ) -> Result<Option<PayloadSocketAddress>, AuctioneerError> {
+        Ok(None)
     }
 }

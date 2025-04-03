@@ -8,13 +8,15 @@ pub mod traits;
 #[cfg(test)]
 mod simulator_tests;
 
-use ethereum_consensus::{deneb::Bytes32, types::mainnet::ExecutionPayload};
 use std::sync::Arc;
 
-use ethereum_consensus::{primitives::BlsSignature, serde::as_str};
+use ethereum_consensus::{
+    deneb::Bytes32, primitives::BlsSignature, serde::as_str, types::mainnet::ExecutionPayload,
+};
 use helix_common::{
     bid_submission::{BidSubmission, BidTrace, SignedBidSubmission},
     deneb::BlobsBundle,
+    electra::ExecutionRequests,
     ValidatorPreferences,
 };
 
@@ -27,6 +29,7 @@ pub struct BlockSimRequest {
     pub signature: BlsSignature,
     pub proposer_preferences: ValidatorPreferences,
     pub blobs_bundle: Option<BlobsBundle>,
+    pub execution_requests: Option<ExecutionRequests>,
     pub parent_beacon_block_root: Option<Bytes32>,
 }
 
@@ -44,6 +47,7 @@ impl BlockSimRequest {
             signature: block.signature().clone(),
             proposer_preferences,
             blobs_bundle: block.blobs_bundle().cloned(),
+            execution_requests: block.execution_requests().cloned(),
             parent_beacon_block_root,
         }
     }

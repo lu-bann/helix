@@ -2,7 +2,10 @@ use ethereum_consensus::{
     primitives::{BlsPublicKey, Hash32},
     ssz,
 };
-use helix_common::{bid_submission::BidTrace, SignedBuilderBid};
+use helix_common::{
+    bid_submission::{v3::header_submission_v3::PayloadSocketAddress, BidTrace},
+    SignedBuilderBid,
+};
 
 use crate::grpc;
 
@@ -16,6 +19,7 @@ pub struct BroadcastHeaderParams {
     pub builder_pub_key: BlsPublicKey,
     pub is_cancellations_enabled: bool,
     pub on_receive: u64,
+    pub payload_address: Option<PayloadSocketAddress>,
 }
 
 impl BroadcastHeaderParams {
@@ -32,6 +36,9 @@ impl BroadcastHeaderParams {
                 .unwrap(),
             is_cancellations_enabled: proto_params.is_cancellations_enabled,
             on_receive: proto_params.on_receive,
+            payload_address: proto_params
+                .payload_address
+                .map(|vec| ssz::prelude::deserialize(&vec).unwrap()),
         }
     }
 
@@ -46,6 +53,10 @@ impl BroadcastHeaderParams {
             builder_pub_key: self.builder_pub_key.to_vec(),
             is_cancellations_enabled: self.is_cancellations_enabled,
             on_receive: self.on_receive,
+            payload_address: self
+                .payload_address
+                .as_ref()
+                .map(|p| ssz::prelude::serialize(p).unwrap()),
         }
     }
 }

@@ -1,3 +1,5 @@
+use std::{self, collections::HashSet, sync::Arc};
+
 use axum::{
     body::{to_bytes, Body},
     http::{Request, StatusCode},
@@ -12,7 +14,7 @@ use helix_common::{
     bellatrix::List,
     chain_info::ChainInfo,
     proofs::{ConstraintsMessage, SignedConstraints, SignedConstraintsWithProofData},
-    ConstraintSubmissionTrace, ConstraintsApiConfig,
+    task, ConstraintSubmissionTrace, ConstraintsApiConfig,
 };
 use helix_datastore::Auctioneer;
 use helix_housekeeper::{ChainUpdate, SlotUpdate};
@@ -20,7 +22,6 @@ use helix_utils::{
     signing::{verify_signed_message, COMMIT_BOOST_DOMAIN},
     utcnow_ns,
 };
-use std::{self, collections::HashSet, sync::Arc};
 use tokio::{
     sync::{
         broadcast,
@@ -32,9 +33,8 @@ use tokio::{
 use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
-use crate::constraints::error::ConstraintsApiError;
-
 use super::error::Conflict;
+use crate::constraints::error::ConstraintsApiError;
 
 // This is the maximum length (randomly chosen) of a request body in bytes.
 pub(crate) const MAX_REQUEST_LENGTH: usize = 1024 * 1024 * 5;
@@ -88,7 +88,7 @@ where
 
         // Spin up the housekeep task
         let api_clone = api.clone();
-        tokio::spawn(async move {
+        task::spawn(file!(), line!(), async move {
             if let Err(err) = api_clone.housekeep(slot_update_subscription).await {
                 error!(
                     error = %err,
@@ -278,7 +278,7 @@ where
         trace.verify_signature = utcnow_ns();
 
         // Store the delegation in the database
-        tokio::spawn(async move {
+        task::spawn(file!(), line!(), async move {
             if let Err(err) = api.auctioneer.save_validator_delegations(signed_delegations).await {
                 error!(error = %err, "Failed to save delegations");
             }
@@ -351,7 +351,7 @@ where
         trace.verify_signature = utcnow_ns();
 
         // Store the delegation in the database
-        tokio::spawn(async move {
+        task::spawn(file!(), line!(), async move {
             if let Err(err) = api.auctioneer.revoke_validator_delegations(signed_revocations).await
             {
                 error!(error = %err, "Failed to do revocation");

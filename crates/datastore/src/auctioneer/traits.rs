@@ -4,7 +4,8 @@ use helix_common::{
     api::constraints_api::{SignedDelegation, SignedRevocation},
     bellatrix::Node,
     bid_submission::{
-        v2::header_submission::SignedHeaderSubmission, BidTrace, SignedBidSubmission,
+        v2::header_submission::SignedHeaderSubmission,
+        v3::header_submission_v3::PayloadSocketAddress, BidTrace, SignedBidSubmission,
     },
     builder_info::BuilderInfo,
     eth::SignedBuilderBid,
@@ -15,9 +16,9 @@ use helix_common::{
     ProposerInfo,
 };
 use helix_database::BuilderInfoDocument;
+use tokio_stream::Stream;
 
 use crate::{error::AuctioneerError, types::SaveBidAndUpdateTopBidResponse};
-use tokio_stream::Stream;
 
 #[async_trait]
 #[auto_impl::auto_impl(Arc)]
@@ -223,6 +224,17 @@ pub trait Auctioneer: Send + Sync + Clone {
         block_hash: &Hash32,
         timestamp_ms: u64,
     ) -> Result<(), AuctioneerError>;
+
+    async fn save_payload_address(
+        &self,
+        block_hash: &Hash32,
+        payload_socket_address: PayloadSocketAddress,
+    ) -> Result<(), AuctioneerError>;
+
+    async fn get_payload_address(
+        &self,
+        block_hash: &Hash32,
+    ) -> Result<Option<PayloadSocketAddress>, AuctioneerError>;
 
     /// Try to acquire or renew leadership for the housekeeper.
     /// Returns: true if the housekeeper is the leader, false if it isn't.

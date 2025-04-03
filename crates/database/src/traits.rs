@@ -5,7 +5,6 @@ use ethereum_consensus::{
     primitives::{BlsPublicKey, Hash32},
     ssz::prelude::*,
 };
-
 use helix_common::{
     api::{
         builder_api::BuilderGetValidatorsResponseEntry, data_api::BidFilters,
@@ -105,7 +104,7 @@ pub trait DatabaseService: Send + Sync + Clone {
     async fn store_block_submission(
         &self,
         submission: Arc<SignedBidSubmission>,
-        trace: SubmissionTrace,
+        trace: Arc<SubmissionTrace>,
         optimistic_version: i16,
     ) -> Result<(), DatabaseError>;
 
@@ -154,6 +153,7 @@ pub trait DatabaseService: Send + Sync + Clone {
         validator_preferences: Arc<ValidatorPreferences>,
     ) -> Result<Vec<DeliveredPayloadDocument>, DatabaseError>;
 
+    #[allow(clippy::too_many_arguments)]
     async fn save_get_header_call(
         &self,
         slot: u64,
@@ -161,6 +161,8 @@ pub trait DatabaseService: Send + Sync + Clone {
         public_key: BlsPublicKey,
         best_block_hash: ByteVector<32>,
         trace: GetHeaderTrace,
+
+        mev_boost: bool,
         user_agent: Option<String>,
     ) -> Result<(), DatabaseError>;
 

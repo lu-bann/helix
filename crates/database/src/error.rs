@@ -37,11 +37,8 @@ pub enum DatabaseError {
     #[error("serde_json error: {0}")]
     SerdeJsonError(#[from] serde_json::Error),
 
-    #[error("from hex error: {0}")]
-    FromHexError(#[from] hex::FromHexError),
-
     #[error("ethereum common error: {0}")]
-    EthereumTypesError(#[from] ethereum_consensus::crypto::Error),
+    EthereumTypesError(#[from] ethereum_consensus::crypto::kzg::Error),
 
     #[error("Block submission already exists")]
     BlockSubmissionAlreadyExists,
