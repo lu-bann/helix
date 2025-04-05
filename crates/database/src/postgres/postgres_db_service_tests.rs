@@ -480,6 +480,9 @@ mod tests {
             SignedBidSubmission::Electra(submission) => {
                 submission.message = bid_trace.clone();
             }
+            SignedBidSubmission::ElectraWithProofs(submission) => {
+                submission.message = bid_trace.clone();
+            }
             SignedBidSubmission::Deneb(submission) => {
                 submission.message = bid_trace.clone();
             }
