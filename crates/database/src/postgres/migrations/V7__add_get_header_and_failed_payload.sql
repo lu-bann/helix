@@ -12,7 +12,7 @@ CREATE TABLE "get_header" (
     "parent_hash" bytea,
     "proposer_pubkey" bytea,
     "block_hash" bytea,
-    "created_at" timestamptz DEFAULT (now())
+    "mev_boost" boolean)
 );
 
 CREATE TABLE "get_header_trace" (
