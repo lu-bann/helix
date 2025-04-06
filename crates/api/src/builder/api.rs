@@ -411,7 +411,11 @@ where
         match api.auctioneer.get_last_slot_delivered().await {
             Ok(Some(slot)) => {
                 if payload.slot() <= slot {
-                    debug!("payload already delivered");
+                    debug!(
+                        payload_slot = payload.slot(),
+                        last_delivered_slot = slot,
+                        "payload already delivered",
+                    );
                     return Err(BuilderApiError::PayloadAlreadyDelivered);
                 }
             }
