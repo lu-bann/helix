@@ -2839,4 +2839,252 @@ mod tests {
             },
         }
     }
+
+    #[tokio::test]
+    async fn test_decode_payload_electra() {
+        // Original JSON with potential control characters had issues
+        // Let's create a properly formatted version
+        let json_payload = r#"{
+            "message": {
+                "slot": "43801",
+                "parent_hash": "0x0b5f5b638e381756ec80c8122cd563c62b4b124a4f2119d18e7c3628d7ea0c06",
+                "block_hash": "0x97d4cdecd134612cb07a179844622461910887daf1aedae0309f2f7004c2f1c0",
+                "builder_pubkey": "0xa11ae7791daf4009c105a56b717dcc760654b34a6fc9fb8b2acbbd202a5e5e4e23b03cd71d4864b0277d8274a923e62f",
+                "proposer_pubkey": "0xa3ad6bf0c8c5f7b455d523326a7c85556e50b8ef499deaeabb368bd1870ae518072d9c6d5a4c9d399155ae370cac86a0",
+                "proposer_fee_recipient": "0xe25583099ba105d9ec0a67f5ae86d90e50036425",
+                "gas_limit": "30000000",
+                "gas_used": "231000",
+                "value": "314999999853000"
+            },
+            "execution_payload": {
+                "parent_hash": "0x0b5f5b638e381756ec80c8122cd563c62b4b124a4f2119d18e7c3628d7ea0c06",
+                "fee_recipient": "0xaff0ca253b97e54440965855cec0a8a2e2399896",
+                "state_root": "0x9f342ac657712320025e29dba0773fa4ef43330f03d02286d8800f41fb2bc650",
+                "receipts_root": "0x843d8e64eea71414ad1449110c79c9335c3003509475e9beae5fd0521dc5a694",
+                "logs_bloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+                "prev_randao": "0xa605e04ec38dea429fe7dfe1676fca040f738d65d56600af1c7205900aaa902e",
+                "block_number": "43175",
+                "gas_limit": "30000000",
+                "gas_used": "231000",
+                "timestamp": "1744019172",
+                "extra_data": "0x4461646479",
+                "base_fee_per_gas": "7",
+                "block_hash": "0x97d4cdecd134612cb07a179844622461910887daf1aedae0309f2f7004c2f1c0",
+                "transactions": [
+                    "0xf86f4a8459682f07825208946177843db3138ae69679a54b95cf345ed759450d87071afd498d000080850345d0069da0dd9a79ae1f59d51b6e7ac9de361060010d59c918e1a4c2b6cb299ff7a0f5a120a0432ea194630d2e7cc259e2e31193d6ed5757ce17ec03feb62be7b167c89fba78",
+                    "0xf86f4b8459682f0782520894687704db07e902e9a8b3754031d168d46e3d586e87071afd498d000080850345d0069da03f325310486ae7bd91b7860ebf8f98a9451c22c55dd4a177c6bc99eb3f4362dfa027caf9f23519bb64e2b59ec898853b11dd7c8e0105baf0d8c19ce00d644d135d",
+                    "0xf86f4c8459682f078252089415e6a5a2e131dd5467fa1ff3acd104f45ee5940b87071afd498d000080850345d0069ea0d9e9ccd1b641bbde881c822f4549b7c16399b8b479147c72067dd2a18fbdbae1a0649a37be450ef707582cbff68d00601c904c8f90e4c74ece1a4ef115f9e86047",
+                    "0xf86f4d8459682f078252089480c4c7125967139acaa931ee984a9db4100e0f3b87071afd498d000080850345d0069ea077ec29efd9cf48f977f4518ca22e3786e12412d691344ea9232ac1ae05fcf81fa00a96a5f56709fd149a727eb81a1abb8bace01401efd97068e0b0dd6cf32567ce",
+                    "0xf86f4e8459682f0782520894d08a63244fcd28b0aec5075052cdce31ba04fead87071afd498d000080850345d0069da0fc1b794a9c71b7eba65da900c310699ffda19fbfc94f37c7f4020ce42391c7bea011224e9dbfb31d65783e6b13c5f09776cf3c15e843d96277b36c08acc0104497",
+                    "0xf86e4f8459682f07825208940b06ef8be65fcda88f2dbae5813480f997ee8e3587071afd498d000080850345d0069da018ef5499cf9161d2c5a87115e48df8a5af4200a9b119c0ceb6c341767e1313029fdc786332c73aa3b247d6389f28b55c910942bfea7bdf778a3d5616d4d04402",
+                    "0xf86f508459682f07825208941cb96c5809da5977f99f69c11ee58bae5711c5f187071afd498d000080850345d0069ea01a67b04f8df9bab5b9888aa1734e9f358b3b2f7262527b33394c16448809164ea027441823f0ea3e114ef7ecdb9da927c777c63f911eb5acfa47034287f864cd61",
+                    "0xf86f518459682f07825208942aa48ee899410a6d97c01b0bb0eeaf1771cc435b87071afd498d000080850345d0069da03654c900c8aa1fc4369d6b132077d7ab9ed4f5371b16e02af78abd80c903fa40a03f64016a7154c0d7f4c078fc40db8db334c141441ef5fa7512f86ae82382f72a",
+                    "0xf86f528459682f078252089407b9d920dd8e8d83dc1125c94fc0b3cdcdf602fb87071afd498d000080850345d0069ea09ea4f4b3fbc71ed03d06867c2f128b2a9fed1f9b1f0e4543ed2fc70a1cf92c89a06d975f26b20a8be66ef5929e9eacf1d8ed3ea02c102584ad9b72350d51c60d64",
+                    "0xf86f538459682f0782520894fcb6e353ad4f79245c7cb704abcffe2f4868424187071afd498d000080850345d0069da0f0e15ebe107d6ed995ebdcb8fa5ac10902f05eeed2c2756c499ac4e412c57d5ea0589f5802e5da03a912f66f5cf1d44004312a1d177da767be523c1b74001046f0",
+                    "0x02f8708501a2e8033d820460800782520894e25583099ba105d9ec0a67f5ae86d90e5003642587011e7da71871c880c080a0dd1ed25d304df8f2ac35712753ca16a1b4395cff94dcc7c1d3046dfb0d263d8ea03ff5e8a5579963ccead8b09fe037b418c93a351797b5e32c56f30be2c76f2e33"
+                ],
+                "withdrawals": [],
+                "blob_gas_used": "0",
+                "excess_blob_gas": "0"
+            },
+            "blobs_bundle": {
+                "commitments": [],
+                "proofs": [],
+                "blobs": []
+            },
+            "execution_requests": {
+                "deposits": [],
+                "withdrawals": [],
+                "consolidations": []
+            },
+            "signature": "0xb82d15dd1168ddb6ab275f2fbd368ede4f480d583812863b6c21f12a213fc97726da3161e50add69e91528a7f06093c41188eb33e00b959e4ee945442e8345d8bec22fcc70b0d36fe4fb7caa303d55ccc1012f74fcfc14772ac05d1d986e94ad"
+        }"#;
+
+        // Try to parse the cleaned JSON
+        match serde_json::from_slice::<SignedBidSubmission>(json_payload.as_bytes()) {
+            Ok(_res) => {}
+            Err(err) => {
+                println!("THIS IS THE ERR: {:?}", err);
+                panic!()
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_decode_payload_electra_with_proofs() {
+        let json_payload = r#"{
+            "message": {
+                "slot": "43800",
+                "parent_hash": "0x135d2dfe898a5bab533f49461a282c4bd25cf23ca8517428e558495e11d187b9",
+                "block_hash": "0xf54f0b595843c7e00e68213210910e921d200ebc8d0e0046249e5f32b34c6c6e",
+                "builder_pubkey": "0xa11ae7791daf4009c105a56b717dcc760654b34a6fc9fb8b2acbbd202a5e5e4e23b03cd71d4864b0277d8274a923e62f",
+                "proposer_pubkey": "0xa0754c7a088d9e003df7f341779a00407d4aae5bc3d0f7f3cf6b264f1ac2750602e0edd7ec1d72822f7051e9cec9af6b",
+                "proposer_fee_recipient": "0xe25583099ba105d9ec0a67f5ae86d90e50036425",
+                "gas_limit": "30000000",
+                "gas_used": "319220",
+                "value": "1071000001029000"
+            },
+            "execution_payload": {
+                "parent_hash": "0x135d2dfe898a5bab533f49461a282c4bd25cf23ca8517428e558495e11d187b9",
+                "fee_recipient": "0xaff0ca253b97e54440965855cec0a8a2e2399896",
+                "state_root": "0x617343465c4d51338156365d7baf394c09f69586eed799a9fd7f62d90d57c071",
+                "receipts_root": "0xb4761095a5790d64f8088bbd889d8332c2cf8713c1af64b1e983565c8e26ac3a",
+                "logs_bloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+                "prev_randao": "0x46b1ce9666e6bd821c69cb7778635080649067d2ff6aa09c9d7fa0cd27ef3327",
+                "block_number": "43174",
+                "gas_limit": "30000000",
+                "gas_used": "319220",
+                "timestamp": "1744019160",
+                "extra_data": "0x4461646479",
+                "base_fee_per_gas": "7",
+                "block_hash": "0xf54f0b595843c7e00e68213210910e921d200ebc8d0e0046249e5f32b34c6c6e",
+                "transactions": [
+                    "0x02f9016e8501a2e8033d800107830f424094894b19a54a829b00ad9f1394dd82cb6746531ce080b901042811248f000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000020000000000000000000000eb8384ac458aebe0bd47e6da25faf7d51f09a1e1000000000000000000000000eb8384ac458aebe0bd47e6da25faf7d51f09a1e100000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000047c700000000000000000000000000000000000000000000000000000000000047c70c001a045d2c7630e82d8542f1a330f1aedf7ab35a09db91e3d5e74839c5186987c36d1a075eb83fd20cc0e8ac6a055c9d8346a443c89db3e90aa589d2ffe0aaa62bef19e",
+                    "0x02f8778501a2e8033d8085037e11d60085037e11d68c82520894894b19a54a829b00ad9f1394dd82cb6746531ce086394c54a7e8e080c080a0d400e0c2de38b42df4a8127ff9c2a9221c573227c85d0f3b55c62885278f5c37a0492f9b7052f5f22a51dea5835e30e71b535c83f55606cbfe9a5579aee92c3718",
+                    "0x02f8738501a2e8033d0185037e11d60085037e11d68c82520894eb8384ac458aebe0bd47e6da25faf7d51f09a1e18203e880c001a0ecd4c253c0a1563f11a07705af3cd05aba57c0c4b3bcdcfcb26dac0634bc5d0ea048794a3ba98635628bd2086b70e6c1eebbbdf2a63a3d923e8b21291888780cf4",
+                    "0x02f86d8501a2e8033d01010782520894e25583099ba105d9ec0a67f5ae86d90e50036425867298a94fd1c080c001a068c76de865e7f888fb50c6fa5d9a5a7a7b0877c8ae4152e117ba6a6267718ca6a04e77d685833b4db12227acd057be19959f38395c3643e5140e98117c06b33cd1",
+                    "0xf86f4a8459682f07825208946177843db3138ae69679a54b95cf345ed759450d87071afd498d000080850345d0069da0dd9a79ae1f59d51b6e7ac9de361060010d59c918e1a4c2b6cb299ff7a0f5a120a0432ea194630d2e7cc259e2e31193d6ed5757ce17ec03feb62be7b167c89fba78",
+                    "0xf86f4b8459682f0782520894687704db07e902e9a8b3754031d168d46e3d586e87071afd498d000080850345d0069da03f325310486ae7bd91b7860ebf8f98a9451c22c55dd4a177c6bc99eb3f4362dfa027caf9f23519bb64e2b59ec898853b11dd7c8e0105baf0d8c19ce00d644d135d",
+                    "0xf86f4c8459682f078252089415e6a5a2e131dd5467fa1ff3acd104f45ee5940b87071afd498d000080850345d0069ea0d9e9ccd1b641bbde881c822f4549b7c16399b8b479147c72067dd2a18fbdbae1a0649a37be450ef707582cbff68d00601c904c8f90e4c74ece1a4ef115f9e86047",
+                    "0xf86f4d8459682f078252089480c4c7125967139acaa931ee984a9db4100e0f3b87071afd498d000080850345d0069ea077ec29efd9cf48f977f4518ca22e3786e12412d691344ea9232ac1ae05fcf81fa00a96a5f56709fd149a727eb81a1abb8bace01401efd97068e0b0dd6cf32567ce",
+                    "0xf86f4e8459682f0782520894d08a63244fcd28b0aec5075052cdce31ba04fead87071afd498d000080850345d0069da0fc1b794a9c71b7eba65da900c310699ffda19fbfc94f37c7f4020ce42391c7bea011224e9dbfb31d65783e6b13c5f09776cf3c15e843d96277b36c08acc0104497",
+                    "0xf86e4f8459682f07825208940b06ef8be65fcda88f2dbae5813480f997ee8e3587071afd498d000080850345d0069da018ef5499cf9161d2c5a87115e48df8a5af4200a9b119c0ceb6c341767e1313029fdc786332c73aa3b247d6389f28b55c910942bfea7bdf778a3d5616d4d04402",
+                    "0xf86f508459682f07825208941cb96c5809da5977f99f69c11ee58bae5711c5f187071afd498d000080850345d0069ea01a67b04f8df9bab5b9888aa1734e9f358b3b2f7262527b33394c16448809164ea027441823f0ea3e114ef7ecdb9da927c777c63f911eb5acfa47034287f864cd61",
+                    "0xf86f518459682f07825208942aa48ee899410a6d97c01b0bb0eeaf1771cc435b87071afd498d000080850345d0069da03654c900c8aa1fc4369d6b132077d7ab9ed4f5371b16e02af78abd80c903fa40a03f64016a7154c0d7f4c078fc40db8db334c141441ef5fa7512f86ae82382f72a",
+                    "0xf86f528459682f078252089407b9d920dd8e8d83dc1125c94fc0b3cdcdf602fb87071afd498d000080850345d0069ea09ea4f4b3fbc71ed03d06867c2f128b2a9fed1f9b1f0e4543ed2fc70a1cf92c89a06d975f26b20a8be66ef5929e9eacf1d8ed3ea02c102584ad9b72350d51c60d64",
+                    "0xf86f538459682f0782520894fcb6e353ad4f79245c7cb704abcffe2f4868424187071afd498d000080850345d0069da0f0e15ebe107d6ed995ebdcb8fa5ac10902f05eeed2c2756c499ac4e412c57d5ea0589f5802e5da03a912f66f5cf1d44004312a1d177da767be523c1b74001046f0",
+                    "0x02f8708501a2e8033d820460800782520894e25583099ba105d9ec0a67f5ae86d90e5003642587035b78f54dd1c880c001a09c8fec97060a6fe6b47556e0eed40755963608b9a7c654de31005be3ce1d7bf1a0179344e31f48fb887324b320a8ff584c0a6b64c22a6d4121eabb44d48b278bb2"
+                ],
+                "withdrawals": [],
+                "blob_gas_used": "0",
+                "excess_blob_gas": "0"
+            },
+            "blobs_bundle": {
+                "commitments": [],
+                "proofs": [],
+                "blobs": []
+            },
+            "execution_requests": {
+                "deposits": [],
+                "withdrawals": [],
+                "consolidations": []
+            },
+            "signature": "0xb4c4ff4a94fa610c15d635e439bd2e0184772f5fff4dce77aab6a70d210869b5fc15c3af3563797766e249e5a692b3e812171348044ec4c16c196c4a9022cf7b0d9447b06553698793468d3d3537f0fb35d0aff0de04ccbf97112de0db3b9173",
+            "proofs": {
+                "transaction_hashes": [
+                    "0xf19a2bdfbc14a7f2e96234a76819169fa5b312d2dbcf7cb82ab0e1c1ae85e306",
+                    "0xea7268bde940b420df6b1d892141aa3076ebe57b28b4262e7d1b5144fafb30d8",
+                    "0x227b2cb80a2963c56be2ea1a6f788c38ace33ab3d36c72619fc61af27789100e",
+                    "0xea7268bde940b420df6b1d892141aa3076ebe57b28b4262e7d1b5144fafb30d8",
+                    "0x227b2cb80a2963c56be2ea1a6f788c38ace33ab3d36c72619fc61af27789100e",
+                    "0x5b55c49a37ea45e223b32fa6fabb183a70110c73f9c7d43e844f209b0de39b3d"
+                ],
+                "generalized_indexes": [2097152, 2097153, 2097154, 2097153, 2097154, 2097155],
+                "merkle_hashes": [
+                    "0x7c5c36ecc65c6ca25644354083e925b640b80c3438d3b3da5860b32bc300b147",
+                    "0xe738a72f724e2277526cba35548b550540b616e218a1b6ed4178bd3367f4fef1",
+                    "0x536d98837f2dd165a55d5eeae91485954472d56f246df256bf3cae19352a123c",
+                    "0x9efde052aa15429fae05bad4d0b1d7c64da64d03d7a1854a588c2cb8430c0d30",
+                    "0xd88ddfeed400a8755596b21942c1497e114c302e6118290f91e6772976041fa1",
+                    "0x87eb0ddba57e35f6d286673802a4af5975e22506c7cf4c64bb6be5ee11527f2c",
+                    "0x26846476fd5fc54a5d43385167c95144f2643f533cc85bb9d16b782f8d7db193",
+                    "0x506d86582d252405b840018792cad2bf1259f1ef5aa5f887e13cb2f0094f51e1",
+                    "0xffff0ad7e659772f9534c195c815efc4014ef1e1daed4404c06385d11192e92b",
+                    "0x6cf04127db05441cd833107a52be852868890e4317e6a02ab47683aa75964220",
+                    "0xb7d05f875f140027ef5118a2247bbb84ce8f2f0f1123623085daf7960c329f5f",
+                    "0xdf6af5f5bbdb6be9ef8aa618e4bf8073960867171e29676f8b284dea6a08a85e",
+                    "0xb58d900f5e182e3c50ef74969ea16c7726c549757cc23523c369587da7293784",
+                    "0xd49a7502ffcfb0340b1d7885688500ca308161a7f96b62df9d083b71fcc8f2bb",
+                    "0x8fe6b1689256c0d385f42f5bbe2027a22c1996e110ba97c171d3e5948de92beb",
+                    "0x8d0d63c39ebade8509e0ae3c9c3876fb5fa112be18f905ecacfecb92057603ab",
+                    "0x95eec8b2e541cad4e91de38385f2e046619f54496c2382cb6cacd5b98c26f5a4",
+                    "0xf893e908917775b62bff23294dbbe3a1cd8e6cc1c35b4801887b646a6f81f17f",
+                    "0x0f00000000000000000000000000000000000000000000000000000000000000"
+                ]
+            }
+        }"#;
+
+        let block_hash = serde_json::from_str::<Hash32>(
+             "\"0xf54f0b595843c7e00e68213210910e921d200ebc8d0e0046249e5f32b34c6c6e\""
+        );
+        // println!("{:?}", block_hash);
+        assert!(block_hash.is_ok());
+
+        let message = serde_json::from_value::<BidTrace>(serde_json::Value::Object(
+            serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(json_payload)
+                .unwrap()
+                .get("message")
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .clone(),
+        ));
+        // println!("message parse result: {:?}", message);
+        assert!(message.is_ok());
+
+        let execution_payload = serde_json::from_value::<helix_common::electra::ExecutionPayload>(
+            serde_json::Value::Object(
+                serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(json_payload)
+                    .unwrap()
+                    .get("execution_payload")
+                    .unwrap()
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        );
+        // println!("execution_payload parse result: {:?}", message);
+        assert!(execution_payload.is_ok());
+
+        let blobs_bundle = serde_json::from_value::<helix_common::electra::BlobsBundle>(
+            serde_json::Value::Object(
+                serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(json_payload)
+                    .unwrap()
+                    .get("blobs_bundle")
+                    .unwrap()
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        );
+        // println!("blobs_bundle parse result: {:?}", message);
+        assert!(blobs_bundle.is_ok());
+
+        let execution_requests = serde_json::from_value::<helix_common::electra::ExecutionRequests>(
+            serde_json::Value::Object(
+                serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(json_payload)
+                    .unwrap()
+                    .get("execution_requests")
+                    .unwrap()
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        );
+        println!("execution_requests parse result: {:?}", message);
+        assert!(execution_requests.is_ok());
+
+        let proofs = serde_json::from_value::<InclusionProofs>(serde_json::Value::Object(
+            serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(json_payload)
+                .unwrap()
+                .get("proofs")
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .clone(),
+        ));
+        // println!("proofs parse result: {:?}", proofs);
+        assert!(proofs.is_ok());
+
+        let result = serde_json::from_slice::<SignedBidSubmission>(json_payload.as_bytes());
+        match result {
+            Ok(ref res) => {
+                println!("THIS IS THE RESULT: {:?}", res);
+            }
+            Err(ref err) => {
+                println!("THIS IS THE ERR: {:?}", err);
+            }
+        };
+        assert!(result.is_ok());
+    }
 }
