@@ -54,9 +54,24 @@ impl Auctioneer for MockAuctioneer {
         Ok(vec![])
     }
 
+    async fn get_validator_delegations_only_map(
+        &self,
+        pub_key: BlsPublicKey,
+    ) -> Result<Vec<BlsPublicKey>, AuctioneerError>{
+        Ok(vec![])
+    }
+
     async fn save_validator_delegations(
         &self,
         _signed_delegations: Vec<SignedDelegation>,
+    ) -> Result<(), AuctioneerError> {
+        Ok(())
+    }
+
+    async fn add_validator_delegation(
+        &self,
+        _delegatee_key: BlsPublicKey,
+        _validator_key: BlsPublicKey
     ) -> Result<(), AuctioneerError> {
         Ok(())
     }

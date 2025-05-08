@@ -1,7 +1,8 @@
 use ethereum_consensus::{
     bellatrix, capella, deneb, electra,
-    primitives::{BlsPublicKey, Hash32},
+    primitives::{BlsPublicKey, Hash32, BlsSignature},
     types::mainnet::{SignedBeaconBlock, SignedBlindedBeaconBlock},
+    builder::{SignedValidatorRegistration, ValidatorRegistration},
 };
 use helix_common::{
     deneb::SignedBlockContents, signed_proposal::VersionedSignedProposal,
@@ -19,6 +20,10 @@ pub struct GetHeaderParams {
     pub parent_hash: Hash32,
     #[serde(rename = "pubkey")]
     pub public_key: BlsPublicKey,
+    
+    /// If `None`, will be omitted in serialized JSON and default to `None` on deserialization.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delegatee_key: Option<BlsPublicKey>,
 }
 
 pub fn unblind_beacon_block(

@@ -550,6 +550,22 @@ impl Auctioneer for RedisCache {
         Ok(delegations)
     }
 
+    async fn get_validator_delegations_only_map(
+        &self,
+        pub_key: BlsPublicKey,
+    ) -> Result<Vec<BlsPublicKey>, AuctioneerError> {
+        let mut record = RedisMetricRecord::new("get_validator_delegations_only_map");
+
+        let key = format!("{:?}", pub_key);
+
+        let delegations =
+            self.get(&key).await.map_err(AuctioneerError::RedisError)?.unwrap_or_default();
+
+        record.record_success();
+        
+        Ok(delegations)
+    }
+
     async fn save_validator_delegations(
         &self,
         signed_delegations: Vec<SignedDelegation>,
@@ -575,6 +591,29 @@ impl Auctioneer for RedisCache {
 
         trace!(len, "saved delegations to cache");
 
+        record.record_success();
+        Ok(())
+    }
+
+    async fn add_validator_delegation(
+        &self,
+        delegatee_key: BlsPublicKey,
+        validator_key: BlsPublicKey
+    ) -> Result<(), AuctioneerError> {
+        let mut record = RedisMetricRecord::new("save_validator_delegations_only_map");
+
+        let key = format!("{:?}", validator_key);
+
+        // Attempt to get the existing delegations from the cache.
+        let mut delegations: Vec<BlsPublicKey> =
+            self.get(&key).await.map_err(AuctioneerError::RedisError)?.unwrap_or_default();
+
+        // Append the new delegation to the existing delegations, removing duplicates.
+        delegations.push(delegatee_key);
+
+        // Save the updated delegations back to the cache.
+        self.set(&key, &delegations, None).await.map_err(AuctioneerError::RedisError)?;
+      
         record.record_success();
         Ok(())
     }

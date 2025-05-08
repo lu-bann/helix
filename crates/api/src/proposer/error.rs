@@ -31,6 +31,9 @@ pub enum ProposerApiError {
     #[error("no bid prepared for request")]
     NoBidPrepared,
 
+    #[error("no delegatee pubkey for request")]
+    NoDelegatee,
+
     #[error("no valid bids returned for proposal")]
     NoBids,
 
@@ -205,6 +208,9 @@ impl IntoResponse for ProposerApiError {
             ProposerApiError::NoBidPrepared => {
                 (StatusCode::NO_CONTENT, "No bid prepared for request").into_response()
             },
+            ProposerApiError::NoDelegatee => {
+                (StatusCode::NO_CONTENT, "No delegatee pubkey for request").into_response()
+            },            
             ProposerApiError::NoBids => {
                 (StatusCode::NO_CONTENT, "No valid bids returned for proposal").into_response()
             },

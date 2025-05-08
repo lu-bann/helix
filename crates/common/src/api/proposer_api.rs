@@ -1,5 +1,8 @@
 use ethereum_consensus::{
-    builder::SignedValidatorRegistration, types::mainnet::ExecutionPayload, Fork,
+    types::mainnet::ExecutionPayload, Fork,
+    ssz::prelude::*,
+    builder::{SignedValidatorRegistration, ValidatorRegistration},
+    primitives::{BlsPublicKey, BlsSignature, U256},
 };
 
 use crate::{validator_preferences::ValidatorPreferences, versioned_payload::PayloadAndBlobs};
@@ -8,7 +11,7 @@ use crate::{validator_preferences::ValidatorPreferences, versioned_payload::Payl
 #[serde(tag = "version", content = "data")]
 pub enum GetPayloadResponse {
     #[serde(rename = "bellatrix")]
-    Bellatrix(ExecutionPayload),
+    Bellatrix(ExecutionPayload), 
     #[serde(rename = "capella")]
     Capella(ExecutionPayload),
     #[serde(rename = "deneb")]
@@ -62,4 +65,15 @@ impl<'de> serde::Deserialize<'de> for GetPayloadResponse {
 pub struct ValidatorRegistrationInfo {
     pub registration: SignedValidatorRegistration,
     pub preferences: ValidatorPreferences,
+}
+
+
+#[derive(Debug, Clone, Default, SimpleSerialize, serde::Serialize, serde::Deserialize)]
+pub struct SignedValidatorRegistrationWithDelegatee {
+    pub message: ValidatorRegistration,
+    pub signature: BlsSignature,
+    
+    /// If `None`, will be omitted in serialized JSON and default to `None` on deserialization.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delegatee_key: Option<BlsPublicKey>
 }

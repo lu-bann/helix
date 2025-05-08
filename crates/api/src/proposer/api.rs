@@ -21,7 +21,7 @@ use helix_beacon_client::{types::BroadcastValidation, BlockBroadcaster, MultiBea
 use helix_common::{
     api::{
         builder_api::BuilderGetValidatorsResponseEntry,
-        proposer_api::{GetPayloadResponse, ValidatorRegistrationInfo},
+        proposer_api::{GetPayloadResponse, ValidatorRegistrationInfo, SignedValidatorRegistrationWithDelegatee},
     },
     beacon_api::PublishBlobsRequest,
     bid_submission::v3::header_submission_v3::PayloadSocketAddress,
@@ -34,6 +34,7 @@ use helix_common::{
     BidRequest, Filtering, GetHeaderTrace, GetPayloadTrace, RegisterValidatorsTrace, RelayConfig,
     ValidatorPreferences,
 };
+
 use helix_database::DatabaseService;
 use helix_datastore::{error::AuctioneerError, Auctioneer};
 use helix_housekeeper::{ChainUpdate, SlotUpdate};
@@ -175,11 +176,30 @@ where
     pub async fn register_validators(
         Extension(proposer_api): Extension<Arc<ProposerApi<A, DB, M, G>>>,
         headers: HeaderMap,
-        Json(registrations): Json<Vec<SignedValidatorRegistration>>,
+        Json(registrations_orign): Json<Vec<SignedValidatorRegistrationWithDelegatee>>,
     ) -> Result<StatusCode, ProposerApiError> {
-        if registrations.is_empty() {
+        if registrations_orign.is_empty() {
             return Err(ProposerApiError::EmptyRequest);
-        }
+        }     
+        
+        let registration_delegations = registrations_orign.clone();
+
+        let proposer_validator_api = proposer_api.clone();
+
+        // Register validators to delegatee pubkey. Store the delegation in the database
+        task::spawn(file!(), line!(), async move {
+            for registration in registration_delegations{
+                if let Some(delegatee_pubkey) = registration.delegatee_key {
+                    if let Err(err) = proposer_validator_api.auctioneer.add_validator_delegation(delegatee_pubkey, registration.message.public_key).await {
+                        error!(error = %err, "Failed to save delegation");
+                    }
+                }    
+            }            
+        });
+
+        let registrations: Vec<SignedValidatorRegistration> = registrations_orign.into_iter().map(|SignedValidatorRegistrationWithDelegatee{message, signature, delegatee_key}|{
+            SignedValidatorRegistration { message, signature }
+        }).collect();
 
         let mut trace = RegisterValidatorsTrace { receive: utcnow_ns(), ..Default::default() };
 
@@ -367,7 +387,7 @@ where
     pub async fn get_header(
         Extension(proposer_api): Extension<Arc<ProposerApi<A, DB, M, G>>>,
         headers: HeaderMap,
-        Path(GetHeaderParams { slot, parent_hash, public_key }): Path<GetHeaderParams>,
+        Path(GetHeaderParams { slot, parent_hash, public_key, delegatee_key }): Path<GetHeaderParams>,
     ) -> Result<impl IntoResponse, ProposerApiError> {
         if proposer_api.auctioneer.kill_switch_enabled().await? {
             return Err(ProposerApiError::ServiceUnavailableError);
@@ -543,8 +563,19 @@ where
     pub async fn get_header_with_proofs(
         Extension(proposer_api): Extension<Arc<ProposerApi<A, DB, M, G>>>,
         headers: HeaderMap,
-        Path(GetHeaderParams { slot, parent_hash, public_key }): Path<GetHeaderParams>,
+        Path(GetHeaderParams { slot, parent_hash, public_key, delegatee_key }): Path<GetHeaderParams>,
     ) -> Result<impl IntoResponse, ProposerApiError> {
+
+        // Fetch active delegations for the validator pubkey, if any
+        let delegatees =
+        proposer_api.auctioneer.get_validator_delegations_only_map(public_key.clone()).await?;
+        if let Some(key) = delegatee_key {
+            if !delegatees.contains(&key){
+                warn!("no delegatee pubkey");
+                return Err(ProposerApiError::NoDelegatee)
+            }
+        }
+        
         let mut trace = GetHeaderTrace { receive: utcnow_ns(), ..Default::default() };
 
         let (head_slot, _) = *proposer_api.curr_slot_info.read().await;

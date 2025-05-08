@@ -1,6 +1,6 @@
 use ethereum_consensus::{
     builder::{SignedValidatorRegistration, ValidatorRegistration},
-    primitives::{BlsPublicKey, BlsSignature, U256},
+    primitives::{BlsPublicKey, BlsSignature, U256}, 
 };
 use helix_common::{
     api::{
@@ -12,11 +12,12 @@ use helix_common::{
     ValidatorPreferences,
 };
 use thiserror::Error;
-
 use crate::{
     error::DatabaseError, postgres::postgres_db_u256_parsing::PostgresNumeric,
     BidSubmissionDocument, BuilderInfoDocument, DeliveredPayloadDocument,
 };
+
+
 
 #[derive(Debug, Error)]
 pub enum RowParsingError {

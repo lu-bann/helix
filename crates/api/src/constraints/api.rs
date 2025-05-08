@@ -151,10 +151,8 @@ where
         };
 
         // Fetch active delegations for the validator pubkey, if any
-        let delegations =
-            api.auctioneer.get_validator_delegations(validator_pubkey.clone()).await?;
         let delegatees =
-            delegations.iter().map(|d| d.message.delegatee_pubkey.clone()).collect::<Vec<_>>();
+            api.auctioneer.get_validator_delegations_only_map(validator_pubkey.clone()).await?;
 
         // Add all the valid constraints to the cache
         for constraint in signed_constraints {

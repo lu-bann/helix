@@ -28,9 +28,20 @@ pub trait Auctioneer: Send + Sync + Clone {
         pub_key: BlsPublicKey,
     ) -> Result<Vec<SignedDelegation>, AuctioneerError>;
 
+    async fn get_validator_delegations_only_map(
+        &self,
+        pub_key: BlsPublicKey,
+    ) -> Result<Vec<BlsPublicKey>, AuctioneerError>;
+
     async fn save_validator_delegations(
         &self,
         signed_delegations: Vec<SignedDelegation>,
+    ) -> Result<(), AuctioneerError>;
+
+    async fn add_validator_delegation(
+        &self,
+        delegatee_key: BlsPublicKey,
+        validator_key: BlsPublicKey
     ) -> Result<(), AuctioneerError>;
 
     async fn revoke_validator_delegations(

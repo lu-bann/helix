@@ -95,6 +95,9 @@ mod tests {
         let key = SecretKey::random(&mut rng).unwrap();
         let signature = key.sign("message".as_bytes());
         let public_key = key.public_key();
+
+        let key1 = SecretKey::random(&mut rng).unwrap();
+
         ValidatorRegistrationInfo {
             registration: SignedValidatorRegistration {
                 message: ValidatorRegistration {
