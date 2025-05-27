@@ -1,5 +1,6 @@
 use alloy::{
-    consensus::TxEnvelope,
+    consensus::{SignableTransaction, TxEip4844Variant, TxEip4844WithSidecar, TxEnvelope},
+    eips::Encodable2718,
     primitives::{TxHash, B256},
     rlp::Decodable,
 };
@@ -97,12 +98,27 @@ impl TryFrom<SignedConstraints> for SignedConstraintsWithProofData {
         for transaction in value.message.transactions.iter() {
             let tx = TxEnvelope::decode(&mut transaction.as_slice())
                 .map_err(|e| ProofError::DecodingFailed(e.to_string()))?;
-
             let tx_hash = *tx.tx_hash();
+
+            let raw_tx = if tx.is_eip4844() {
+                // If the transaction is of type 3, we need to remove the optional sidecar
+                // before computing the hash tree root.
+                let (variant, sig, _) = tx.as_eip4844().unwrap().clone().into_parts();
+                let tx_without_sidecar = match variant {
+                    TxEip4844Variant::TxEip4844(tx) => tx,
+                    TxEip4844Variant::TxEip4844WithSidecar(TxEip4844WithSidecar { tx, .. }) => tx,
+                };
+
+                let tx_without_sidecar_signed = tx_without_sidecar.into_signed(sig);
+                let tx_envelope = TxEnvelope::from(tx_without_sidecar_signed);
+                Transaction::try_from(tx_envelope.encoded_2718().as_ref()).unwrap()
+            } else {
+                transaction.clone()
+            };
 
             // Compute the hash tree root on the transaction object decoded without the optional
             // sidecar. this is to prevent hashing the blobs of type 3 transactions.
-            let root = transaction
+            let root = raw_tx
                 .hash_tree_root()
                 .map_err(|e| ProofError::DecodingFailed(e.to_string()))?;
             let root = Hash256::from_slice(root.as_slice());
